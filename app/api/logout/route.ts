@@ -1,1 +1,0 @@
-import {NextResponse} from 'next/server';export async function POST(){const r=NextResponse.redirect(new URL('/login','https://placeholder.local'),303);r.cookies.set('flix_session','',{maxAge:0,path:'/'});return r}
