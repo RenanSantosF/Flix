@@ -8,14 +8,16 @@ const first=available.find(s=>s.season_number===1)||available.find(s=>s.season_n
 const [season,setSeason]=useState(first?.season_number??1);
 const [episode,setEpisode]=useState(1);
 const [mode,setMode]=useState<'external'|'native'>('external');
-const [blockPopups,setBlockPopups]=useState(true);
+const [blockPopups,setBlockPopups]=useState(false);
+const [interactionEnabled,setInteractionEnabled]=useState(false);
 const [draft,setDraft]=useState('');
 const [url,setUrl]=useState('');
 const [error,setError]=useState('');
 const videoRef=useRef<HTMLVideoElement>(null);
 const selected=available.find(s=>s.season_number===season);
 const src=useMemo(()=>type==='movie'?'https://superflixapi.fun/filme/'+encodeURIComponent(id)+'#noLink':'https://superflixapi.fun/serie/'+encodeURIComponent(id)+'/'+season+'/'+episode+'#noEpList',[type,id,season,episode]);
-useEffect(()=>{setUrl('');setDraft('');setError('');setMode('external')},[type,id,season,episode]);
+useEffect(()=>{setUrl('');setDraft('');setError('');setMode('external');setInteractionEnabled(false)},[type,id,season,episode]);
+useEffect(()=>{if(!interactionEnabled)return;const timer=setTimeout(()=>setInteractionEnabled(false),8000);return()=>clearTimeout(timer)},[interactionEnabled]);
 useEffect(()=>{
 if(mode!=='native'||!url||!videoRef.current)return;
 const video=videoRef.current;
@@ -33,9 +35,10 @@ return()=>{video.removeEventListener('error',onError);hls?.destroy();video.remov
 function playDirect(){try{const parsed=new URL(draft.trim());if(!['https:','http:'].includes(parsed.protocol))throw Error();setError('');setUrl(parsed.href);setMode('native')}catch{setError('Informe uma URL HTTP(S) válida para MP4 ou HLS (.m3u8).')}}
 return <section className="playerSection"><h2>Assistir agora</h2>{type==='tv'&&<div className="selectors"><label>Temporada <select value={season} onChange={e=>{setSeason(Number(e.target.value));setEpisode(1)}}>{available.map(s=><option key={s.season_number} value={s.season_number}>{s.name||'Temporada '+s.season_number}</option>)}</select></label><label>Episódio <select value={episode} onChange={e=>setEpisode(Number(e.target.value))}>{Array.from({length:selected?.episode_count||1},(_,i)=><option key={i+1} value={i+1}>Episódio {i+1}</option>)}</select></label></div>}
 <div style={{display:'flex',gap:12,flexWrap:'wrap',margin:'16px 0'}}><button type="button" onClick={()=>{setMode('external');setError('')}}>Player externo</button><button type="button" onClick={()=>{setMode('native');setError('')}}>Player próprio (teste)</button></div>
-{mode==='external'&&<label style={{display:'flex',alignItems:'center',gap:10,margin:'10px 0 16px',cursor:'pointer'}}><input type="checkbox" checked={blockPopups} onChange={e=>setBlockPopups(e.target.checked)}/> Bloquear pop-ups (recomendado)</label>}
+{mode==='external'&&<label style={{display:'flex',alignItems:'center',gap:10,margin:'10px 0 16px',cursor:'pointer'}}><input type="checkbox" checked={blockPopups} onChange={e=>setBlockPopups(e.target.checked)}/> Bloqueio rígido (pode causar 404)</label>}
 {mode==='native'&&<div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:14}}><input aria-label="URL direta do vídeo" value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Cole uma URL MP4 ou .m3u8 autorizada" style={{flex:'1 1 260px',minWidth:0,padding:12,borderRadius:8,background:'#151b25',border:'1px solid #555',color:'white'}}/><button type="button" onClick={playDirect}>Reproduzir URL</button></div>}
-<div className="videoFrame">{mode==='external'?<iframe key={src+(blockPopups?":blocked":":compatible")} sandbox={blockPopups?"allow-scripts allow-same-origin allow-forms allow-presentation":undefined} src={src} title="Reprodutor SuperFlixAPI" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" loading="lazy"/>:url?<video ref={videoRef} controls playsInline style={{width:'100%',height:'100%',background:'#000'}}/>:<div style={{display:'grid',placeItems:'center',height:'100%',padding:20,textAlign:'center'}}>Insira uma URL direta de vídeo para testar o player próprio.</div>}</div>
+{mode==='external'&&!blockPopups&&<div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'12px 0'}}><button type="button" onClick={()=>setInteractionEnabled(v=>!v)}>{interactionEnabled?'Proteger player agora':'Liberar controles por 8 segundos'}</button><span style={{fontSize:13,color:'#b6bdca'}}>{interactionEnabled?'Toques liberados temporariamente':'Toques bloqueados para evitar anúncios acidentais'}</span></div>}
+<div className="videoFrame" style={{position:'relative'}}>{mode==='external'?<iframe key={src+(blockPopups?":blocked":":compatible")} sandbox={blockPopups?"allow-scripts allow-same-origin allow-forms allow-presentation":undefined} src={src} title="Reprodutor SuperFlixAPI" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen referrerPolicy="strict-origin-when-cross-origin" loading="lazy"/>:url?<video ref={videoRef} controls playsInline style={{width:'100%',height:'100%',background:'#000'}}/>:<div style={{display:'grid',placeItems:'center',height:'100%',padding:20,textAlign:'center'}}>Insira uma URL direta de vídeo para testar o player próprio.</div>}{mode==='external'&&!blockPopups&&!interactionEnabled&&<div aria-label="Proteção contra toques no player" style={{position:'absolute',inset:0,zIndex:2,background:'transparent',touchAction:'pan-y'}}/>}</div>
 {error&&<p role="alert" style={{color:'#ff9e9e'}}>{error}</p>}
-<p className="playerNote">{mode==='external'?(blockPopups?'Bloqueio de novas abas ativo. Se o vídeo não carregar, desative a opção de bloqueio para testar o modo de compatibilidade.':'Modo de compatibilidade: o player pode abrir pop-ups.'):'O player próprio não extrai vídeos do iframe. Links podem falhar por CORS, autenticação ou expiração.'}</p></section>
+<p className="playerNote">{mode==='external'?(blockPopups?'Bloqueio rígido de pop-ups: o serviço pode retornar 404.':'Proteção de toques ativada: use Liberar controles para dar play e pause. Pop-ups ainda podem surgir durante os 8 segundos liberados.'):'O player próprio não extrai vídeos do iframe. Links podem falhar por CORS, autenticação ou expiração.'}</p></section>
 }
