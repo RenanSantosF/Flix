@@ -43,7 +43,9 @@ public class PopupBlockingTest {
             if ("true".equals(js(scenario, script))) return;
             SystemClock.sleep(150);
         }
-        fail("Condition did not become true: " + script);
+        AtomicReference<String> diagnostics = new AtomicReference<>("");
+        scenario.onActivity(a->diagnostics.set(a.mediaDebugState()));
+        fail("Condition did not become true: " + script + "; " + diagnostics.get() + "; " + js(scenario,"JSON.stringify({observer:!!window.__flixMediaObserver,bridge:!!window.FlixMedia,video:document.querySelector('video')?{time:document.querySelector('video').currentTime,paused:document.querySelector('video').paused}:null})"));
     }
     private void load(ActivityScenario<MainActivity> scenario, String html) throws Exception {
         scenario.onActivity(activity -> activity.testBrowser().loadDataWithBaseURL(NavigationPolicy.HOME + "android-test", html, "text/html", "UTF-8", null));
@@ -121,6 +123,7 @@ public class PopupBlockingTest {
         try (ActivityScenario<MainActivity> scenario = launch()) {
             load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video><script>window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
             waitForJs(scenario, "!!window.FlixControl");
+            waitForJs(scenario, "!!window.__flixMediaObserver");
             js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
             tap(scenario, 50, 32);
             waitForJs(scenario, "window.lastProgress && window.lastProgress.key==='movie:603' && window.lastProgress.position>=0.65 && window.lastProgress.playing");
@@ -133,6 +136,7 @@ public class PopupBlockingTest {
         try (ActivityScenario<MainActivity> scenario = launch()) {
             load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><style>.flix-pip video{position:fixed;inset:0;width:100vw;height:100vh;background:black;}</style><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video>");
             waitForJs(scenario, "!!window.FlixControl");
+            waitForJs(scenario, "!!window.__flixMediaObserver");
             js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0}));true");
             tap(scenario, 50, 32);
             waitForJs(scenario, "document.querySelector('video').currentTime>0.2");
@@ -170,7 +174,8 @@ public class PopupBlockingTest {
     private void saveScreenshot(String filename) throws Exception {
         android.graphics.Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         assertNotNull(image);
-        java.io.File folder=InstrumentationRegistry.getInstrumentation().getContext().getExternalFilesDir("screenshots");
+        String additional=InstrumentationRegistry.getArguments().getString("additionalTestOutputDir");
+        java.io.File folder=additional==null?InstrumentationRegistry.getInstrumentation().getContext().getExternalFilesDir("screenshots"):new java.io.File(additional);
         assertNotNull(folder);folder.mkdirs();
         try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(folder,filename))){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
         image.recycle();

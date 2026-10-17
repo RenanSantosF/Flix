@@ -52,7 +52,6 @@ jobs:
           if test -f android/app/build/outputs/apk/debug/app-debug.apk; then cp android/app/build/outputs/apk/debug/app-debug.apk android/output/Flix-Android-teste.apk; fi
           python3 -c 'import glob,os,shutil; paths=glob.glob(os.environ["ANDROID_HOME"]+"/build-tools/*/lib/apksigner.jar"); shutil.copy2(sorted(paths)[-1],"android/output/apksigner.jar") if paths else None'
           timeout 15 adb logcat -d > android/output/emulator-logcat.txt 2>/dev/null || true
-          timeout 15 adb pull /sdcard/Android/data/com.renansantos.flix.test/files/screenshots android/output/screenshots 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -61,5 +60,6 @@ jobs:
             android/output/
             android/app/build/reports/
             android/app/build/outputs/androidTest-results/
+            android/app/build/outputs/connected_android_test_additional_output/
             android/emulator.log
           retention-days: 14

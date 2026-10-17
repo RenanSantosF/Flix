@@ -60,6 +60,9 @@ public final class MainActivity extends Activity {
     private boolean playbackActive, documentStartObserver, destroyed, enteringPip;
     private JavaScriptReplyProxy activeReply;
     private String observerScript = "";
+    private int mediaMessages;
+    private String lastMediaOrigin = "";
+    private boolean selfTest() { return BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false); }
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -133,7 +136,7 @@ public final class MainActivity extends Activity {
                 else if (!"about:blank".equals(url)) { view.stopLoading(); noteBlockedNavigation(); view.loadUrl(lastAppUrl); }
             }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!documentStartObserver && NavigationPolicy.isAppUrl(url)) view.evaluateJavascript(observerScript, null);
+                if (!documentStartObserver && (selfTest() || NavigationPolicy.isAppUrl(view.getUrl() == null ? "" : view.getUrl()))) view.evaluateJavascript(observerScript, null);
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); progress.setVisibility(View.GONE); }
@@ -200,9 +203,10 @@ public final class MainActivity extends Activity {
         });
         // Untrusted frames may report bounded media numbers only. They cannot invoke native actions.
         WebViewCompat.addWebMessageListener(browser, "FlixMedia", Collections.singleton("*"), (view, message, sourceOrigin, mainFrame, reply) -> {
+            if (BuildConfig.DEBUG) { mediaMessages++; lastMediaOrigin = sourceOrigin.toString(); }
             if (contextKey.isEmpty() || destroyed || NavigationPolicy.isAdUrl(sourceOrigin.toString())) return;
-            if (!NavigationPolicy.isAppUrl(browser.getUrl() == null ? "" : browser.getUrl())) return;
-            if (!"https".equals(sourceOrigin.getScheme()) && !(BuildConfig.DEBUG && "null".equals(sourceOrigin.toString()))) return;
+            if (!selfTest() && !NavigationPolicy.isAppUrl(browser.getUrl() == null ? "" : browser.getUrl())) return;
+            if (!selfTest() && !"https".equals(sourceOrigin.getScheme())) return;
             try {
                 String raw = message.getData(); if (raw == null || raw.length() > 1024) return;
                 JSONObject data = new JSONObject(raw); String video = data.optString("videoId");
@@ -293,4 +297,5 @@ public final class MainActivity extends Activity {
     int popupCount() { return blockedPopups.get(); }
     int navigationCount() { return blockedNavigations.get(); }
     boolean isPlaybackActive() { return playbackActive; }
+    String mediaDebugState() { return "context=" + contextKey + ", messages=" + mediaMessages + ", origin=" + lastMediaOrigin + ", documentStart=" + documentStartObserver + ", video=" + activeVideo + ", url=" + browser.getUrl(); }
 }
