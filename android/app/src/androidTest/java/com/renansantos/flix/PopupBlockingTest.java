@@ -229,9 +229,46 @@ public class PopupBlockingTest {
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
             js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
-            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.5-player (5)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.6-player (6)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
             saveScreenshot("Flix-recuperacao-blob.png");
+        }
+    }
+
+    @Test public void extensionlessHlsWithIncorrectHtmlMimeRecoversByInspectingRealDecoderBytes() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            final byte[] bytes;
+            try(java.io.InputStream stream=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("recovery-hls.base64")) {
+                java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();byte[] buffer=new byte[4096];int n;
+                while((n=stream.read(buffer))!=-1)output.write(buffer,0,n);
+                bytes=android.util.Base64.decode(output.toByteArray(),android.util.Base64.DEFAULT);
+            }
+            scenario.onActivity(a->a.nativeTestHls(bytes));
+            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastProgress=null;window.lastNotice='';window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail});window.addEventListener('flix:notice',function(e){window.lastNotice=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
+            js(scenario,"FlixMedia.postMessage(JSON.stringify({videoId:'opaque:1',error:4,position:0,duration:0,source:'https://flix-ebon-ten.vercel.app/test-stream?token=private',sourceType:'video/mp4',sourceKind:'https'}));true");
+            waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
+            AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
+            assertEquals("\"\"",js(scenario,"window.lastNotice"));
+            saveScreenshot("Flix-recuperacao-sem-extensao.png");
+        }
+    }
+
+    @Test public void repeatedBrowserErrorCannotOverwriteNativeFailureOrRestartItsSource() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            scenario.onActivity(a->a.nativeTestClip("<!doctype html><html>Invalid media</html>".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastNotice='';window.lastDiagnostic='';window.errors=0;window.addEventListener('flix:notice',function(e){window.lastNotice=e.detail});window.addEventListener('flix:diagnostic',function(e){window.lastDiagnostic=e.detail});window.addEventListener('flix:progress',function(e){if(e.detail.error)window.errors++});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");
+            String message="FlixMedia.postMessage(JSON.stringify({videoId:'failure:1',error:4,position:0,duration:0,source:'https://flix-ebon-ten.vercel.app/test-media.mp4?token=private',sourceKind:'https'}));true";
+            js(scenario,message);
+            waitForJs(scenario,"window.lastDiagnostic.indexOf('Formato: página HTML')>=0");
+            String original=js(scenario,"window.lastDiagnostic");
+            js(scenario,message);SystemClock.sleep(500);
+            assertEquals(original,js(scenario,"window.lastDiagnostic"));assertEquals("0",js(scenario,"window.errors"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('token=')<0 && window.lastDiagnostic.indexOf('test-media.mp4')<0"));
+            AtomicReference<Boolean> open=new AtomicReference<>(true);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertFalse(open.get());
         }
     }
 

@@ -64,7 +64,7 @@ final class NativePlayback {
     NativePlayback(Activity activity, FrameLayout root, Runnable pip, Listener listener) {
         this.activity=activity; this.root=root; this.pip=pip; this.listener=listener;
     }
-    private DataSource.Factory network(String referer, String userAgent) {
+    private DataSource.Factory network(MediaRequestContext context, String userAgent) {
         OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(15,TimeUnit.SECONDS).readTimeout(20,TimeUnit.SECONDS)
             .followSslRedirects(false)
@@ -80,10 +80,13 @@ final class NativePlayback {
             .addNetworkInterceptor(chain -> {
                 // This also validates every redirect and every HLS/DASH segment/key request.
                 if (!MediaUrlPolicy.allowed(chain.request().url().toString())) throw new IOException("Invalid media redirect");
-                return chain.proceed(chain.request());
+                okhttp3.Request.Builder request=chain.request().newBuilder().removeHeader("Referer").removeHeader("Origin");
+                for(java.util.Map.Entry<String,String> header:context.headers(chain.request().url().toString()).entrySet())request.header(header.getKey(),header.getValue());
+                return chain.proceed(request.build());
             })
             .cookieJar(new CookieJar() {
                 @Override public List<Cookie> loadForRequest(HttpUrl url) {
+                    if(!context.cookiesAllowed(url.toString()))return Collections.emptyList();
                     String header=CookieManager.getInstance().getCookie(url.toString());
                     if(header==null)return Collections.emptyList();
                     List<Cookie> cookies=new ArrayList<>();
@@ -91,15 +94,14 @@ final class NativePlayback {
                     return cookies;
                 }
                 @Override public void saveFromResponse(HttpUrl url,List<Cookie> cookies) {
+                    if(!context.cookiesAllowed(url.toString()))return;
                     for(Cookie cookie:cookies)CookieManager.getInstance().setCookie(url.toString(),cookie.toString());
                 }
             }).build();
         OkHttpDataSource.Factory factory=new OkHttpDataSource.Factory(client).setUserAgent(userAgent);
-        // Only the origin is forwarded. Signed frame paths and query strings stay private.
-        if(!referer.isEmpty())factory.setDefaultRequestProperties(Collections.singletonMap("Referer",referer));
         return factory; // Keep file/data/content URIs unavailable even inside playlists.
     }
-    void open(String source, String sourceType, String origin, String userAgent, double resume, DataSource.Factory testSource) {
+    void open(String source, String sourceType, MediaRequestContext context, String userAgent, double resume, DataSource.Factory testSource) {
         close(false);
         // Media URLs can contain ephemeral signatures. Do not let engine errors log them.
         androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF);
@@ -114,7 +116,9 @@ final class NativePlayback {
         panel.addView(toolbar,new LinearLayout.LayoutParams(-1,dp(52)));
         playerView=new PlayerView(activity);playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
         panel.addView(playerView,new LinearLayout.LayoutParams(-1,0,1));root.addView(panel,new FrameLayout.LayoutParams(-1,-1));
-        DefaultMediaSourceFactory sources=new DefaultMediaSourceFactory(testSource!=null?testSource:network(MediaUrlPolicy.origin(origin),userAgent));
+        final MediaFormatProbe format=new MediaFormatProbe();
+        DataSource.Factory requests=testSource!=null?testSource:network(context,userAgent);
+        DefaultMediaSourceFactory sources=new DefaultMediaSourceFactory(observeFormat(requests,source,format));
         sources.setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(0) {
             @Override public long getRetryDelayMsFor(LoadErrorHandlingPolicy.LoadErrorInfo info) { return C.TIME_UNSET; }
         });
@@ -123,8 +127,11 @@ final class NativePlayback {
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true);
         playerView.setPlayer(player);
         final double start=resume;
+        String type=sourceType.toLowerCase(Locale.ROOT),path=android.net.Uri.parse(source).getPath();
+        final String mime=type.contains("mpegurl")||(path!=null&&path.toLowerCase(Locale.ROOT).endsWith(".m3u8"))?MimeTypes.APPLICATION_M3U8:
+            type.contains("dash+xml")||(path!=null&&path.toLowerCase(Locale.ROOT).endsWith(".mpd"))?MimeTypes.APPLICATION_MPD:"";
         player.addListener(new Player.Listener() {
-            private boolean positioned;
+            private boolean positioned, formatRecovered;
             @Override public void onIsPlayingChanged(boolean playing) { if(player!=null)report(false); }
             @Override public void onPlaybackStateChanged(int state) {
                 if(player==null)return;
@@ -132,14 +139,43 @@ final class NativePlayback {
                 if(state==Player.STATE_ENDED)report(true);
             }
             @Override public void onPlayerError(PlaybackException error) {
-                String message=failureMessage(error);close(false);listener.failed(message);
+                String detected=format.manifestMime();
+                boolean parsing=error.errorCode==PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED||error.errorCode==PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED;
+                // Media3 cannot infer HLS/DASH from a URL such as /stream?id=... .
+                // Retry a parsing failure once only when actual bytes identify that
+                // manifest. HTTP/authorization/decoder errors are never retried here.
+                if(!formatRecovered&&parsing&&!detected.isEmpty()&&!detected.equals(mime)) {
+                    formatRecovered=true;positioned=false;
+                    player.setMediaItem(new MediaItem.Builder().setUri(source).setMimeType(detected).build());
+                    player.prepare();player.play();return;
+                }
+                String message=failureMessage(error)+" Formato: "+format.description()+" · Media3 "+error.errorCode;
+                close(false);listener.failed(message);
             }
         });
         MediaItem.Builder item=new MediaItem.Builder().setUri(source);
-        String type=sourceType.toLowerCase(Locale.ROOT),path=android.net.Uri.parse(source).getPath();
-        if(type.contains("mpegurl")||(path!=null&&path.toLowerCase(Locale.ROOT).endsWith(".m3u8")))item.setMimeType(MimeTypes.APPLICATION_M3U8);
-        else if(type.contains("dash+xml")||(path!=null&&path.toLowerCase(Locale.ROOT).endsWith(".mpd")))item.setMimeType(MimeTypes.APPLICATION_MPD);
+        if(!mime.isEmpty())item.setMimeType(mime);
         player.setMediaItem(item.build());player.prepare();player.play();handler.post(ticker);
+    }
+    private static DataSource.Factory observeFormat(DataSource.Factory factory,String source,MediaFormatProbe probe) {
+        return ()->new DataSource() {
+            private final DataSource delegate=factory.createDataSource();
+            private boolean observed;
+            @Override public long open(androidx.media3.datasource.DataSpec spec) throws IOException {
+                observed=spec.position==0&&source.equals(spec.uri.toString());
+                long result=delegate.open(spec);
+                if(observed)for(java.util.Map.Entry<String,java.util.List<String>> entry:delegate.getResponseHeaders().entrySet())
+                    if("Content-Type".equalsIgnoreCase(entry.getKey())&&!entry.getValue().isEmpty())probe.response(entry.getValue().get(0));
+                return result;
+            }
+            @Override public int read(byte[] buffer,int offset,int length) throws IOException {
+                int n=delegate.read(buffer,offset,length);if(observed&&n>0)probe.read(buffer,offset,n);return n;
+            }
+            @Override public android.net.Uri getUri() {return delegate.getUri();}
+            @Override public java.util.Map<String,java.util.List<String>> getResponseHeaders() {return delegate.getResponseHeaders();}
+            @Override public void addTransferListener(androidx.media3.datasource.TransferListener listener) {delegate.addTransferListener(listener);}
+            @Override public void close() throws IOException {delegate.close();}
+        };
     }
     private static String failureMessage(PlaybackException error) {
         Throwable cause=error;

@@ -20,6 +20,9 @@ frame quando o vídeo falha com uma fonte `blob:`. A recuperação exige um úni
 vídeo e um único manifesto recente e tenta novamente por até cinco segundos
 se a fonte chegar depois do erro. Não consulta endpoints extras nem adivinha links.
 Fontes ambíguas e recusas HTTP continuam sendo apresentadas como falhas.
+A versão 0.6 mantém o contexto de requisição declarado pelo vídeo e corrige
+a seleção de parser para manifestos sem extensão, usando os bytes já lidos.
+Falhas nativas deixam de ser apagadas por eventos repetidos do navegador.
 O aviso inclui diagnóstico copiável com versão do APK/WebView, domínio do frame,
 tipo de fonte e motivo fixo; nenhum caminho, query, cookie ou token é exibido.
 O navegador comum usa o iframe oficial e as próprias regras de pop-up do navegador.

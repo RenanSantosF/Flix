@@ -1,5 +1,25 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.6: o motor mantém o Referer conforme a política declarada no documento
+(sem fragmento), o Origin quando o vídeo declara CORS e a seleção de cookies
+correspondente a `crossorigin`. O endereço do frame precisa ter a mesma origem
+autenticada pelo WebView. Cabeçalhos são recalculados em cada destino/redirect;
+nenhum caminho, query ou cookie é exibido no diagnóstico ou enviado ao site.
+
+Quando uma URL HTTPS sem extensão fornece um manifesto HLS/DASH, o primeiro
+decodificador pode interpretá-la como arquivo comum. O app reconhece o manifesto
+pelos bytes já lidos nessa tentativa e seleciona o parser correto uma única vez.
+Não realiza sondagens de endpoints nem repete recusas HTTP. MIME sozinho não
+transforma HTML de erro/verificação em manifesto.
+
+O erro HTTP/formato/codec nativo fica preservado: eventos repetidos do WebView
+não podem trocá-lo por “esta fonte já foi tentada”. O diagnóstico mostra apenas
+versões, domínios, tipo/formato e códigos/mensagens fixas, sem URLs assinadas.
+
+Versão 0.5: uma fonte blob pode usar um manifesto recente já solicitado pelo
+próprio frame, somente com um vídeo e uma fonte inequívoca; fontes tardias podem
+ser reconhecidas nos cinco segundos posteriores ao erro.
+
 Versão 0.4: remove a lista de bloqueio por domínio das requisições internas
 à página do player. Ela também bloqueava scripts/frames que podem participar
 da liberação da mídia. As novas janelas continuam nos mesmos WebViews
@@ -13,18 +33,18 @@ o app pode tentar o mesmo recurso de mídia com Media3/ExoPlayer, preservando
 posição, histórico, pausa e PiP. A interface normal do site e os servidores que
 já funcionam continuam com o WebView. Não há um seletor extra de reprodução.
 
-Somente o src/currentSrc ou source[src] já atribuído ao vídeo com erro é usado.
+O src/currentSrc ou source[src] já atribuído ao vídeo com erro é usado.
 Não são descobertos endpoints, extraídos manifestos de páginas protegidas nem
-contornadas verificações. URLs blob sem uma source HTTPS não são recuperadas.
+contornadas verificações. Blobs sem uma fonte ou manifesto HTTPS inequívoco não são recuperados.
 O link passa somente da página para o decodificador local; nunca vai ao site,
 logs, analytics ou a um servidor de extração.
 
 As requisições nativas mantêm TLS, rejeitam protocolos inseguros e destinos
 locais/privados, inclusive em DNS, segmentos e redirecionamentos. Cookies são
 selecionados novamente por domínio a cada requisição; não existe um cabeçalho
-Cookie global. O Referer contém somente a origem do frame, sem query assinada.
+Cookie global. O Referer segue a política do documento; o destino recebe apenas o contexto permitido por ela.
 Uma recusa HTTP não é contornada nem repetida automaticamente. Há no máximo
-duas fontes diferentes tentadas por sessão, sem repetição da mesma fonte.
+duas fontes diferentes tentadas por sessão, sem repetição após falha HTTP ou erro definitivo (há uma correção de parser quando os bytes comprovam um manifesto).
 
 Validação: fixture local de vídeo real H.264, rejeitada pelo HTML por um MIME
 incompatível, é reproduzida pelo motor nativo com retomada e PiP. Isso verifica
