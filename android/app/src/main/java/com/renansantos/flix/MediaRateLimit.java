@@ -32,8 +32,14 @@ final class MediaRateLimit implements Interceptor {
         if(previous!=null&&previous.until>now)throw new Limited(host,previous);
         Response response=chain.proceed(chain.request());
         if(response.code()!=429)return response;
-        Deadline deadline=parse(response.header("Retry-After"),response.header("Date"),clock.getAsLong());
-        store.put(host,deadline);response.close();throw new Limited(host,deadline);
+        Deadline deadline=observe(host,response.header("Retry-After"),response.header("Date"));
+        response.close();throw new Limited(host,deadline);
+    }
+    synchronized Deadline observe(String host,String retryAfter,String date) {
+        Deadline deadline=parse(retryAfter,date,clock.getAsLong()),previous=store.get(host);
+        // Concurrent browser/native responses must not shorten a known deadline.
+        if(previous!=null&&previous.until>deadline.until)deadline=previous;
+        store.put(host,deadline);return deadline;
     }
     static Deadline parse(String retryAfter,String serverDate,long now) {
         long delay=DEFAULT_WAIT_MS;boolean supplied=false;

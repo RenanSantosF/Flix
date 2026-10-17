@@ -1,5 +1,22 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.9: a transferência para o motor nativo descarrega todo o iframe do
+provedor, em vez de apenas pausar seu HTMLVideoElement. O motor só inicia após
+o documento principal confirmar o carregamento de about:blank, com token por
+sessão. Scripts e pedidos periódicos do provedor deixam de concorrer com a
+recuperação. O documento Flix mantém seus timers, histórico, controles e PiP.
+Ao voltar, os servidores só recarregam por ação explícita do usuário.
+
+Respostas HTTP 429 observadas pelo WebView compartilham o mesmo prazo por host
+com o motor nativo: ele não faz um pedido imediato após a recusa original.
+Respostas concorrentes não encurtam o prazo já conhecido. Contexto novo,
+background ou destruição cancelam uma transferência pendente.
+
+Testes instrumentados verificam o fim dos pedidos periódicos do iframe, a
+continuidade do documento principal/histórico e 429 no WebView → espera sem
+novo pedido → uma requisição nativa com vídeo H.264 real. São fixtures de
+transporte; não comprovam disponibilidade do servidor alternativo real.
+
 Versão 0.8: HTTP 429 é tratado como limite de requisições, com o domínio que
 realmente respondeu após os redirects. Lê Retry-After em segundos ou HTTP-date
 (com Date para compensar diferença de relógio). Se ausente/inválido, usa espera

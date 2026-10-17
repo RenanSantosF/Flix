@@ -2,6 +2,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import Icon from './Icons';
 import PlayerDiagnostic from './PlayerDiagnostic';
+import ProviderFrame from './ProviderFrame';
 import {useLibrary} from './Library';
 import {startWatching,recordProgress,readLibrary} from '../lib/watch-library';
 import {imageUrl,titleKey} from '../lib/catalog';
@@ -61,7 +62,7 @@ function nextEpisode(){if(episode<(selected?.episode_count||1))setEpisode(e=>e+1
 const episodeCount=selected?.episode_count||1;
 
 return <section className="playerSection" id="assistir"><div className="player-heading"><h2>{type==='tv'?'Sua sessão':'Hora de assistir'}</h2><span>{type==='tv'?'T'+season+' · Episódio '+episode:'Prepare a pipoca'}</span></div>
-<div className={'videoFrame'+(started&&!mediaReady?' server-selection':'')} id="player-frame">{!started?<div className="player-cover">{title.backdrop_path&&<img src={imageUrl(title.backdrop_path,'w780')} alt=""/>}<button type="button" aria-label={'Assistir '+title.title} onClick={()=>setStarted(true)}><Icon name="play" size={23}/></button><p>{type==='tv'?'Temporada '+season+' · Episódio '+episode:title.title}</p></div>:<iframe key={src+":"+reload} src={src} title="Reprodutor SuperFlixAPI" allow="autoplay *; encrypted-media *; picture-in-picture *; fullscreen *; clipboard-write *; accelerometer *; gyroscope *; web-share *" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}</div>
+<div className={'videoFrame'+(started&&!mediaReady?' server-selection':'')} id="player-frame">{!started?<div className="player-cover">{title.backdrop_path&&<img src={imageUrl(title.backdrop_path,'w780')} alt=""/>}<button type="button" aria-label={'Assistir '+title.title} onClick={()=>setStarted(true)}><Icon name="play" size={23}/></button><p>{type==='tv'?'Temporada '+season+' · Episódio '+episode:title.title}</p></div>:<ProviderFrame key={src+":"+reload} src={src} title="Reprodutor SuperFlixAPI" sessionKey={titleKey(title)} season={season} episode={episode} onReconnect={()=>setReload(n=>n+1)}/>}</div>
 {started&&<div className="player-controls">{type==='tv'&&<><button className="button button-glass" disabled={episode<=1} onClick={()=>{setEpisode(e=>Math.max(1,e-1));setEnded(false)}}><Icon name="back" size={16}/>Anterior</button><button className={'button '+(ended&&hasNext?'button-accent':'button-glass')} disabled={!hasNext} onClick={nextEpisode}><Icon name="next" size={16}/>Próximo</button></>}{nativeApp&&<button className="button button-glass pip-button" onClick={floatPlayer}><Icon name="pip" size={17}/>Janela flutuante</button>}<button className="icon-button" aria-label="Recarregar vídeo" title="Recarregar vídeo" onClick={()=>setReload(n=>n+1)}><Icon name="refresh" size={17}/></button></div>}
 {notice&&<p className="player-notice" role="status">{notice}</p>}
 {nativeApp&&started&&<PlayerDiagnostic resetKey={src+reload}/>}

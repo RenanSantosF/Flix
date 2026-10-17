@@ -107,6 +107,21 @@ final class NativePlayback {
         OkHttpDataSource.Factory factory=new OkHttpDataSource.Factory(client).setUserAgent(userAgent);
         return factory; // Keep file/data/content URIs unavailable even inside playlists.
     }
+    void browserLimited(String url,java.util.Map<String,String> headers) {
+        if(!MediaUrlPolicy.allowedNetwork(url)||headers==null)return;
+        String host=android.net.Uri.parse(url).getHost(),retryAfter=null,date=null;
+        for(java.util.Map.Entry<String,String> entry:headers.entrySet()) {
+            if("Retry-After".equalsIgnoreCase(entry.getKey()))retryAfter=entry.getValue();
+            if("Date".equalsIgnoreCase(entry.getKey()))date=entry.getValue();
+        }
+        if(host!=null)rateLimit.observe(host,retryAfter,date);
+    }
+    DataSource.Factory sharedRateFixture(byte[] clip,java.util.concurrent.atomic.AtomicInteger calls) {
+        okhttp3.OkHttpClient client=new okhttp3.OkHttpClient.Builder().addInterceptor(new MediaRedirectInterceptor()).addInterceptor(rateLimit).addInterceptor(chain->{
+            calls.incrementAndGet();return new okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+                .body(okhttp3.ResponseBody.create(okhttp3.MediaType.parse("video/mp4"),clip)).build();
+        }).build();return new OkHttpDataSource.Factory(client);
+    }
     void open(String source, String sourceType, MediaRequestContext context, String userAgent, double resume, DataSource.Factory testSource) {
         close(false);
         final int generation=session;
@@ -212,7 +227,7 @@ final class NativePlayback {
         long seconds=MediaRateLimit.seconds(waitingLimit.deadline,System.currentTimeMillis());
         waitLabel.setText("Limite temporário do provedor\n"+(seconds>0?"Nova tentativa em "+seconds+" s":"Tentando novamente…"));
     }
-    private void clearWaiting() {waitingLimit=null;if(waitLabel!=null)waitLabel.setVisibility(View.GONE);if(playerView!=null)playerView.setUseController(true);}
+    private void clearWaiting() {waitingLimit=null;if(waitLabel!=null)waitLabel.setVisibility(View.GONE);if(playerView!=null)playerView.setUseController(!activity.isInPictureInPictureMode());}
     private static String failureMessage(PlaybackException error) {
         MediaRateLimit.Limited limited=MediaRateLimit.find(error);
         if(limited!=null)return MediaRateLimit.message(limited,System.currentTimeMillis());
@@ -242,7 +257,7 @@ final class NativePlayback {
         if(waitingLimit!=null) {String message=MediaRateLimit.message(waitingLimit,System.currentTimeMillis());close(false);listener.failed(message);}
         else if(player!=null)player.pause();
     }
-    void pip(boolean active) { if(toolbar!=null)toolbar.setVisibility(active?View.GONE:View.VISIBLE);if(playerView!=null)playerView.setUseController(!active); }
+    void pip(boolean active) { if(toolbar!=null)toolbar.setVisibility(active?View.GONE:View.VISIBLE);if(playerView!=null)playerView.setUseController(!active&&waitingLimit==null); }
     boolean isWaiting(){return waitingLimit!=null;}
     boolean isOpen() { return player!=null; }
     long positionMs() { return player==null?0:player.getCurrentPosition(); }
