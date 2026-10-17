@@ -215,13 +215,34 @@ public class PopupBlockingTest {
         }
     }
 
+    @Test public void failedBlobRecoversFromObservedHlsAndReportsSafeDiagnostics() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            final byte[] bytes;
+            try(java.io.InputStream stream=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("recovery-hls.base64")) {
+                java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();byte[] buffer=new byte[4096];int n;
+                while((n=stream.read(buffer))!=-1)output.write(buffer,0,n);
+                bytes=android.util.Base64.decode(output.toByteArray(),android.util.Base64.DEFAULT);
+            }
+            scenario.onActivity(a->a.nativeTestHls(bytes));
+            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><video></video><script>window.lastProgress=null;window.lastDiagnostic='';window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail});window.addEventListener('flix:diagnostic',function(e){window.lastDiagnostic=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
+            js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
+            waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.5-player (5)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
+            saveScreenshot("Flix-recuperacao-blob.png");
+        }
+    }
+
     @Test public void unsupportedVideoWithoutHttpsSourceCannotInvokeNativeRecovery() throws Exception {
         try (ActivityScenario<MainActivity> scenario = launch()) {
-            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
+            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastProgress=null;window.lastDiagnostic='';window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});window.addEventListener('flix:diagnostic',function(e){window.lastDiagnostic=e.detail});</script>");
             waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");
             js(scenario,"FlixMedia.postMessage(JSON.stringify({videoId:'bad:1',error:4,position:0,duration:0,source:'http://127.0.0.1/private.mp4'}));true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.error===4");
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('fonte não aceito')>=0 && window.lastDiagnostic.indexOf('127.0.0.1')<0 && window.lastDiagnostic.indexOf('private.mp4')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(true);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertFalse(open.get());
         }
     }
