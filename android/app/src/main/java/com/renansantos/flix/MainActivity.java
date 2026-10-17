@@ -60,6 +60,7 @@ public final class MainActivity extends Activity {
     private boolean playbackActive, documentStartObserver, destroyed, enteringPip;
     private JavaScriptReplyProxy activeReply;
     private String observerScript = "";
+    private String testHtml;
     private int mediaMessages;
     private String lastMediaOrigin = "";
     private boolean selfTest() { return BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false); }
@@ -128,6 +129,9 @@ public final class MainActivity extends Activity {
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
+                // Instrumentation uses a real HTTPS document origin, without weakening media checks.
+                if (selfTest() && testHtml != null && request.isForMainFrame() && (NavigationPolicy.HOME + "android-test").equals(url))
+                    return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(testHtml.getBytes(StandardCharsets.UTF_8)));
                 if (NavigationPolicy.isAdUrl(url) || (request.isForMainFrame() && !NavigationPolicy.isAppUrl(url))) { noteBlockedNavigation(); return emptyResponse(); }
                 return null;
             }
@@ -136,7 +140,7 @@ public final class MainActivity extends Activity {
                 else if (!"about:blank".equals(url)) { view.stopLoading(); noteBlockedNavigation(); view.loadUrl(lastAppUrl); }
             }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!documentStartObserver && (selfTest() || NavigationPolicy.isAppUrl(view.getUrl() == null ? "" : view.getUrl()))) view.evaluateJavascript(observerScript, null);
+                if (!documentStartObserver && NavigationPolicy.isAppUrl(view.getUrl() == null ? "" : view.getUrl())) view.evaluateJavascript(observerScript, null);
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if (request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); progress.setVisibility(View.GONE); }
@@ -205,8 +209,8 @@ public final class MainActivity extends Activity {
         WebViewCompat.addWebMessageListener(browser, "FlixMedia", Collections.singleton("*"), (view, message, sourceOrigin, mainFrame, reply) -> {
             if (BuildConfig.DEBUG) { mediaMessages++; lastMediaOrigin = sourceOrigin.toString(); }
             if (contextKey.isEmpty() || destroyed || NavigationPolicy.isAdUrl(sourceOrigin.toString())) return;
-            if (!selfTest() && !NavigationPolicy.isAppUrl(browser.getUrl() == null ? "" : browser.getUrl())) return;
-            if (!selfTest() && !"https".equals(sourceOrigin.getScheme())) return;
+            if (!NavigationPolicy.isAppUrl(browser.getUrl() == null ? "" : browser.getUrl())) return;
+            if (!"https".equals(sourceOrigin.getScheme())) return;
             try {
                 String raw = message.getData(); if (raw == null || raw.length() > 1024) return;
                 JSONObject data = new JSONObject(raw); String video = data.optString("videoId");
@@ -294,6 +298,7 @@ public final class MainActivity extends Activity {
         browser.stopLoading(); browser.destroy(); super.onDestroy();
     }
     WebView testBrowser() { return browser; }
+    void loadTestHtml(String html) { if (!selfTest()) throw new IllegalStateException("Test fixture is debug-only"); testHtml = html; browser.loadUrl(NavigationPolicy.HOME + "android-test"); }
     int popupCount() { return blockedPopups.get(); }
     int navigationCount() { return blockedNavigations.get(); }
     boolean isPlaybackActive() { return playbackActive; }

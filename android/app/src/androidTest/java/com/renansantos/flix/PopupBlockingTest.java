@@ -48,7 +48,7 @@ public class PopupBlockingTest {
         fail("Condition did not become true: " + script + "; " + diagnostics.get() + "; " + js(scenario,"JSON.stringify({observer:!!window.__flixMediaObserver,bridge:!!window.FlixMedia,video:document.querySelector('video')?{time:document.querySelector('video').currentTime,paused:document.querySelector('video').paused}:null})"));
     }
     private void load(ActivityScenario<MainActivity> scenario, String html) throws Exception {
-        scenario.onActivity(activity -> activity.testBrowser().loadDataWithBaseURL(NavigationPolicy.HOME + "android-test", html, "text/html", "UTF-8", null));
+        scenario.onActivity(activity -> activity.loadTestHtml(html));
         waitForJs(scenario, "document.readyState === 'complete' && document.title === 'Popup test'");
     }
     private void tap(ActivityScenario<MainActivity> scenario, int cssX, int cssY) {
