@@ -164,7 +164,7 @@ public class PopupBlockingTest {
             js(scenario, "window.savedTitle=document.querySelector('.poster-card h3').textContent;document.querySelector('.poster-card .favorite-button').click();true");
             waitForJs(scenario, "document.querySelector('.poster-card .favorite-button').getAttribute('aria-pressed')==='true'");
             js(scenario, "document.querySelector('.bottom-nav a[href=\"/?view=list\"]').click();true");
-            waitForJs(scenario, "document.querySelector('.page-heading h1') && document.querySelector('.page-heading h1').textContent.indexOf('Minha lista')>=0 && document.querySelector('.poster-grid .poster-card')");
+            waitForJs(scenario, "!!document.querySelector('.page-heading h1') && document.querySelector('.page-heading h1').textContent.indexOf('Minha lista')>=0 && !!document.querySelector('.poster-grid .poster-card')");
             saveScreenshot("Flix-minha-lista.png");
             scenario.onActivity(a->a.testBrowser().reload());
             waitForJs(scenario, "document.querySelector('.poster-grid .favorite-button[aria-pressed=true]')!==null");

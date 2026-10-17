@@ -39,5 +39,11 @@ a reprodução no dispositivo do usuário.
 
 Build local: JDK 17, Gradle 8.9, Android SDK 35; executar
 `gradle :app:assembleDebug :app:testDebugUnitTest :app:lintDebug` nesta pasta.
-O APK debug pode precisar ser desinstalado antes de uma atualização gerada
-por outra máquina de build, devido à assinatura temporária de testes.
+O APK do CI usa assinatura debug temporária. O APK distribuído da versão
+0.2 em diante é reassinado com uma identidade persistente, mantida fora do
+repositório. Para futuras entregas, reutilizar o backup privado
+`Flix-Android-signing-private.zip`, que contém as instruções de assinatura,
+e incrementar `versionCode`. Nunca publicar esse backup no GitHub.
+O workflow também fornece `output/apksigner.jar` para verificar e assinar.
+A primeira migração da versão 0.1 exige desinstalar a assinatura antiga;
+atualizações assinadas com a identidade persistente preservam os dados.
