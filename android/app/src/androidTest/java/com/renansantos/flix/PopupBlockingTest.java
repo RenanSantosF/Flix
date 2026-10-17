@@ -101,6 +101,16 @@ public class PopupBlockingTest {
         }
     }
 
+    @Test public void providerDependencyLoadsAndVideoPlaysWhileItsPopupIsContained() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            scenario.onActivity(a->a.playerTestBootstrap("window.bootstrapReady=true;window.startProvider=function(){window.open('https://asiafilm.org/ad','_blank');document.querySelector('video').play();};"));
+            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><script src='https://asiafilm.org/flix-player-test.js'></script><body style='margin:0'><button style='height:64px;width:100%' onclick='startProvider()'>Play</button><video muted loop playsinline src='data:video/mp4;base64,"+clip()+"'></video>");
+            waitForJs(scenario,"window.bootstrapReady===true");tap(scenario,50,32);waitForCount(scenario,true,1);
+            waitForJs(scenario,"!document.querySelector('video').paused && document.querySelector('video').currentTime>0.2");
+            assertEquals("\"Popup test\"",js(scenario,"document.title"));
+        }
+    }
+
     @Test public void blocksRedirectsAndExternalAppSchemes() throws Exception {
         try (ActivityScenario<MainActivity> scenario = launch()) {
             load(scenario, "<!doctype html><title>Popup test</title><body>Navigation test</body>");

@@ -13,6 +13,8 @@ a área volta à proporção de reprodução. As permissões do iframe seguem a
 integração documentada pelo provedor. Pop-ups são contidos pelo cliente Android. A partir da versão 0.4, uma fonte
 HTTPS rejeitada pelo HTML com erro 4 pode ser tentada automaticamente pelo
 motor Media3 local, sem trocar o provedor nem mostrar opções experimentais.
+O APK bloqueia a abertura de janelas e navegação externa, preservando as
+requisições internas que o provedor usa para preparar a mídia.
 Recusas HTTP e fontes inválidas continuam sendo apresentadas como falhas.
 O navegador comum usa o iframe oficial e as próprias regras de pop-up do navegador.
 

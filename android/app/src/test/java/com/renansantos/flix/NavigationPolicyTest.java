@@ -28,4 +28,11 @@ public class NavigationPolicyTest {
         org.junit.Assert.assertFalse(NavigationPolicy.isPlaybackKey("live:https://outside.example"));
         org.junit.Assert.assertFalse(NavigationPolicy.isPlaybackKey("movie:abc"));
     }
+    @Test public void providerDependenciesCanLoadWhileTopLevelAdsStayBlocked() {
+        assertFalse(NavigationPolicy.blockNetworkRequest("https://asiafilm.org/player-bootstrap.js",false));
+        assertTrue(NavigationPolicy.canLoadSubframe("https://asiafilm.org/embed"));
+        assertTrue(NavigationPolicy.blockNetworkRequest("https://asiafilm.org/ad",true));
+        assertTrue(NavigationPolicy.blockNetworkRequest("https://outside.example/ad",true));
+        assertFalse(NavigationPolicy.blockNetworkRequest(NavigationPolicy.HOME,true));
+    }
 }

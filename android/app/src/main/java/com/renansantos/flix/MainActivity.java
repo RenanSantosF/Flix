@@ -64,7 +64,7 @@ public final class MainActivity extends Activity {
     private androidx.media3.datasource.DataSource.Factory nativeTestSource;
     private final HashSet<String> recoveredSources = new HashSet<>();
     private String observerScript = "";
-    private String testHtml;
+    private String testHtml, testBootstrap;
     private int mediaMessages;
     private String lastMediaOrigin = "";
     private boolean selfTest() { return BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false); }
@@ -149,7 +149,9 @@ public final class MainActivity extends Activity {
                 // Instrumentation uses a real HTTPS document origin, without weakening media checks.
                 if (selfTest() && testHtml != null && request.isForMainFrame() && (NavigationPolicy.HOME + "android-test").equals(url))
                     return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(testHtml.getBytes(StandardCharsets.UTF_8)));
-                if (NavigationPolicy.isAdUrl(url) || (request.isForMainFrame() && !NavigationPolicy.isAppUrl(url))) { noteBlockedNavigation(); return emptyResponse(); }
+                if (NavigationPolicy.blockNetworkRequest(url,request.isForMainFrame())) { noteBlockedNavigation(); return emptyResponse(); }
+                if(selfTest()&&testBootstrap!=null&&"https://asiafilm.org/flix-player-test.js".equals(url))
+                    return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream(testBootstrap.getBytes(StandardCharsets.UTF_8)));
                 return null;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
@@ -245,7 +247,7 @@ public final class MainActivity extends Activity {
                         exitFullscreen();
                         try {
                             nativePlayback.open(source,sourceType,sourceOrigin.toString(),browser.getSettings().getUserAgentString(),
-                                contextKey.startsWith("live:")?0:Math.max(resumePosition,Math.min(position,604800)),selfTest()?nativeTestSource:null);
+                                contextKey.startsWith("live:")?0:(position>0?Math.min(position,604800):resumePosition),selfTest()?nativeTestSource:null);
                         } catch(RuntimeException failure) {nativePlayback.close(false);notice("Não foi possível preparar este vídeo. Tente o principal ou o legendado.");}
                         return;
                     }
@@ -344,6 +346,7 @@ public final class MainActivity extends Activity {
         if(nativePlayback!=null)nativePlayback.close(false);
         browser.stopLoading(); browser.destroy(); super.onDestroy();
     }
+    void playerTestBootstrap(String script) {if(!selfTest())throw new IllegalStateException("Debug fixture only");testBootstrap=script;}
     void nativeTestClip(byte[] bytes) { if(!selfTest())throw new IllegalStateException("Debug fixture only");nativeTestSource=()->new androidx.media3.datasource.ByteArrayDataSource(bytes); }
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}

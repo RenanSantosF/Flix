@@ -101,6 +101,8 @@ final class NativePlayback {
     }
     void open(String source, String sourceType, String origin, String userAgent, double resume, DataSource.Factory testSource) {
         close(false);
+        // Media URLs can contain ephemeral signatures. Do not let engine errors log them.
+        androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF);
         if(!MediaUrlPolicy.allowed(source))return;
         panel=new LinearLayout(activity);panel.setOrientation(LinearLayout.VERTICAL);panel.setBackgroundColor(Color.BLACK);
         toolbar=new LinearLayout(activity);toolbar.setGravity(Gravity.CENTER_VERTICAL);toolbar.setPadding(dp(8),0,dp(8),0);

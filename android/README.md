@@ -1,6 +1,14 @@
 # Flix Android · Recuperação de vídeo
 
-Versão 0.4: quando um HTMLVideoElement retorna MEDIA_ERR_SRC_NOT_SUPPORTED (4),
+Versão 0.4: remove a lista de bloqueio por domínio das requisições internas
+à página do player. Ela também bloqueava scripts/frames que podem participar
+da liberação da mídia. As novas janelas continuam nos mesmos WebViews
+invisíveis, sem rede nem scripts; navegação principal externa, intents e
+downloads continuam bloqueados. Não há carregamento de páginas de anúncio
+em segundo plano. O teste de regressão carrega uma dependência de um host
+antes bloqueado e comprova que o vídeo segue tocando e seu popup é contido.
+
+Além disso, quando um HTMLVideoElement retorna MEDIA_ERR_SRC_NOT_SUPPORTED (4),
 o app pode tentar o mesmo recurso de mídia com Media3/ExoPlayer, preservando
 posição, histórico, pausa e PiP. A interface normal do site e os servidores que
 já funcionam continuam com o WebView. Não há um seletor extra de reprodução.
@@ -60,7 +68,8 @@ direto. Esse token é apenas uma preferência de renderização, não autentica�
 Novas janelas são consumidas por WebViews invisíveis, sem JavaScript nem
 acesso à rede, e destruídas em até dois segundos. Navegações da página
 principal para fora do domínio Flix, protocolos de abertura de outros apps,
-downloads e os domínios publicitários identificados são bloqueados.
+downloads são bloqueados. Requisições internas HTTPS não recebem mais
+bloqueio indiscriminado por domínio.
 
 Não existe interface JavaScript/nativa de propósito geral. Certificados TLS são verificados
 normalmente. Cookies de terceiros permanecem disponíveis para o player e
