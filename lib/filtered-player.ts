@@ -52,6 +52,37 @@ export function isVerificationPage(html: string): boolean {
   return /confirme que voc[eê] [eé] humano para continuar|sorry, you have been blocked|cf-chl-|<title>\s*(?:verifica[çc][ãa]o|just a moment|attention required)/i.test(html);
 }
 
+export function isExternalViewPage(html: string): boolean {
+  return /Visualiza[çc][ãa]o Externa/.test(html) && /(?:copyBtn|EMBED CODE)/.test(html);
+}
+
+// This uses ordinary CORS fetch. It never reads opaque responses or bypasses
+// verification; the provider must allow the browser to read the document.
+export async function loadBrowserPlayer(src: string, appOrigin: string, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<string> {
+  const source = new URL(src);
+  if (source.origin !== PROVIDER) throw new Error('invalid_source');
+  providerUrl(source.pathname + source.search);
+  source.hash = '';
+  const response = await fetcher(source.href, {
+    mode: 'cors', credentials: 'omit', cache: 'no-store', signal,
+    headers: {Accept: 'text/html'}, referrerPolicy: 'strict-origin-when-cross-origin',
+  });
+  if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) {
+    await response.body?.cancel();
+    throw new Error('browser_source_unavailable');
+  }
+  const finalUrl = new URL(response.url || source.href);
+  if (finalUrl.origin !== PROVIDER) {
+    await response.body?.cancel();
+    throw new Error('invalid_redirect');
+  }
+  providerUrl(finalUrl.pathname + finalUrl.search);
+  const html = await readPlayerHtml(response);
+  if (isVerificationPage(html)) throw new Error('verification_required');
+  if (isExternalViewPage(html)) throw new Error('embed_document_unavailable');
+  return filterPlayerHtml(html, finalUrl, appOrigin);
+}
+
 export function filterPlayerHtml(html: string, upstream: URL, appOrigin: string): string {
   const document = parse(html);
   function clean(parent: Parent) {

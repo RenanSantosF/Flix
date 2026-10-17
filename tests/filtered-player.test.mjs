@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {FILTERED_CSP, FILTERED_SANDBOX, MAX_PLAYER_BYTES, filterPlayerHtml, isVerificationPage, providerUrl, readPlayerHtml} from '../lib/filtered-player.ts';
+import {FILTERED_CSP, FILTERED_SANDBOX, MAX_PLAYER_BYTES, filterPlayerHtml, isVerificationPage, loadBrowserPlayer, providerUrl, readPlayerHtml} from '../lib/filtered-player.ts';
 
 const source = new URL('https://superflixapi.fun/filme/603');
 const app = 'https://flix.example';
@@ -54,4 +54,31 @@ test('limits decoded upstream bytes even without a trustworthy content length', 
   assert.equal(await readPlayerHtml(new Response('<video>ok</video>')), '<video>ok</video>');
   await assert.rejects(readPlayerHtml(new Response('x', {headers:{'content-length':String(MAX_PLAYER_BYTES + 1)}})));
   await assert.rejects(readPlayerHtml(new Response('x'.repeat(MAX_PLAYER_BYTES + 1))));
+});
+
+test('browser loading uses CORS without credentials and filters before rendering', async () => {
+  let observed;
+  const html=await loadBrowserPlayer(source.href+'#noLink',app,new AbortController().signal,async (url,options)=>{
+    observed={url,options};
+    return new Response('<script>detectSandbox()</script><video controls src="movie.mp4"></video>',{headers:{'content-type':'text/html'}});
+  });
+  assert.equal(observed.url,source.href);
+  assert.equal(observed.options.mode,'cors');
+  assert.equal(observed.options.credentials,'omit');
+  assert.doesNotMatch(html,/detectSandbox/);
+  assert.match(html,/<video controls/);
+});
+
+test('browser loading rejects CORS failures, human verification and external-view pages', async () => {
+  const signal=new AbortController().signal;
+  await assert.rejects(loadBrowserPlayer(source.href,app,signal,async()=>{throw new TypeError('Failed to fetch')}));
+  for(const body of ['<title>Verificação</title>Confirme que você é humano para continuar.','<h1>Visualização Externa</h1><button id="copyBtn">EMBED CODE</button>']){
+    await assert.rejects(loadBrowserPlayer(source.href,app,signal,async()=>new Response(body,{headers:{'content-type':'text/html'}})));
+  }
+});
+
+test('browser loading rejects cross-origin redirected documents', async () => {
+  const response=new Response('<video controls></video>',{headers:{'content-type':'text/html'}});
+  Object.defineProperty(response,'url',{value:'https://other.example/player/1'});
+  await assert.rejects(loadBrowserPlayer(source.href,app,new AbortController().signal,async()=>response),/invalid_redirect/);
 });

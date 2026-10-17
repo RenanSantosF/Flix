@@ -13,7 +13,9 @@ O catálogo TMDB não fornece vídeos. Reprodução requer fontes autorizadas. N
 
 ## Player filtrado (experimental)
 
-O modo Filtrado busca somente documentos HTML de reprodução da SuperFlixAPI,
+O modo Filtrado tenta primeiro uma leitura CORS pelo navegador e, se ela não
+for permitida, tenta a leitura pelo servidor. Busca somente documentos HTML
+de reprodução da SuperFlixAPI,
 remove as assinaturas de publicidade observadas e mantém o documento isolado
 por sandbox no iframe e na resposta HTTP. Não encaminha cookies nem credenciais
 do visitante ao provedor. Verificações humanas e recusas de acesso encerram a
@@ -21,6 +23,8 @@ tentativa; o modo não tenta contorná-las. O provedor pode bloquear requisiçõ
 do servidor ou depender de recursos incompatíveis com essa filtragem.
 
 Os demais modos continuam disponíveis no seletor do player. A filtragem não
-garante a reprodução nem remove anúncios embutidos no próprio vídeo.
+garante a reprodução nem remove anúncios embutidos no próprio vídeo. Conteúdo
+lido pelo navegador é exibido em `srcdoc` com sandbox, sem origem compartilhada
+com o aplicativo. Erros do provedor são diferenciados no cabeçalho `X-Player-Error`.
 
 Validação (Node.js 22.6 ou superior): `npm test` e `npm run build`.
