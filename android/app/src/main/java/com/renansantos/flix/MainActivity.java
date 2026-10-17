@@ -332,7 +332,7 @@ public final class MainActivity extends Activity {
         android.content.pm.PackageInfo engine = WebView.getCurrentWebViewPackage();
         String version = engine == null ? "?" : engine.versionName;
         String mediaHost="";
-        try {String value=java.net.URI.create(data.optString("source")).getHost();if(value!=null&&value.matches("[a-zA-Z0-9.-]{1,253}"))mediaHost=" · mídia "+value;}catch(RuntimeException ignored) { }
+        try {String value=java.net.URI.create(data.optString("source")).getHost();if(MediaUrlPolicy.allowed(data.optString("source"))&&value!=null&&value.matches("[a-zA-Z0-9.-]{1,253}"))mediaHost=" · mídia "+value;}catch(RuntimeException ignored) { }
         // Only versions, source scheme, frame/media hostname and fixed reasons. Never paths,
         // query strings, cookies, provider HTML or signed media addresses.
         return "Flix " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ") · WebView " + version
