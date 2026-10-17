@@ -91,6 +91,16 @@ public class PopupBlockingTest {
         }
     }
 
+    @Test public void asynchronousPopupHandshakeContinuesWithoutOpeningAnAd() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = launch()) {
+            load(scenario, "<!doctype html><title>Popup test</title><script>window.providerReady=false;setTimeout(function(){var popup=window.open('https://asiafilm.org/ad','_blank');window.providerReady=!!popup;},500);</script>");
+            waitForCount(scenario, true, 1);
+            waitForJs(scenario, "window.providerReady===true");
+            assertEquals("\"Popup test\"", js(scenario, "document.title"));
+            assertEquals("true", js(scenario, "location.origin==='https://flix-ebon-ten.vercel.app'"));
+        }
+    }
+
     @Test public void blocksRedirectsAndExternalAppSchemes() throws Exception {
         try (ActivityScenario<MainActivity> scenario = launch()) {
             load(scenario, "<!doctype html><title>Popup test</title><body>Navigation test</body>");
@@ -153,6 +163,25 @@ public class PopupBlockingTest {
         }
     }
 
+    @Test public void liveDurationEnablesPipWithoutRestoringVodPosition() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = launch()) {
+            // Real clip playback, with the infinite duration metadata used by live streams.
+            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video><script>var v=document.querySelector('video');Object.defineProperty(v,'duration',{get:function(){return Infinity;}});window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
+            waitForJs(scenario, "!!window.FlixControl && !!window.__flixMediaObserver");
+            js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0}));true");
+            tap(scenario, 50, 32);
+            waitForJs(scenario, "!document.querySelector('video').paused && document.querySelector('video').currentTime>0.2");
+            assertEquals("null", js(scenario, "window.lastProgress"));
+            js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'live:channel-test',season:1,episode:1,resume:100}));true");
+            waitForJs(scenario, "window.lastProgress && window.lastProgress.key==='live:channel-test' && window.lastProgress.live && window.lastProgress.duration===0 && window.lastProgress.playing");
+            js(scenario, "FlixControl.postMessage(JSON.stringify({type:'pip'}));true");
+            AtomicReference<Boolean> pip=new AtomicReference<>(false);long deadline=SystemClock.uptimeMillis()+8000;
+            while(SystemClock.uptimeMillis()<deadline){scenario.onActivity(a->pip.set(a.isInPictureInPictureMode()));if(pip.get())break;SystemClock.sleep(150);}
+            assertTrue("Live playback must enter PiP",pip.get());
+            waitForJs(scenario, "!document.querySelector('video').paused");
+        }
+    }
+
     @Test public void liveCatalogShowsThreeCompactPostersAndPersistsFavorites() throws Exception {
         org.junit.Assume.assumeTrue("Live UI runs after the production merge", "true".equals(InstrumentationRegistry.getArguments().getString("liveCatalog")));
         try (ActivityScenario<MainActivity> scenario = launch()) {
@@ -168,6 +197,32 @@ public class PopupBlockingTest {
             saveScreenshot("Flix-minha-lista.png");
             scenario.onActivity(a->a.testBrowser().reload());
             waitForJs(scenario, "document.querySelector('.poster-grid .favorite-button[aria-pressed=true]')!==null");
+        }
+    }
+
+    @Test public void productionPlayerHasOneEpisodePickerAndTallServerArea() throws Exception {
+        org.junit.Assume.assumeTrue("Production UI runs after merge", "true".equals(InstrumentationRegistry.getArguments().getString("liveCatalog")));
+        try (ActivityScenario<MainActivity> scenario = launch()) {
+            scenario.onActivity(a->a.testBrowser().loadUrl(NavigationPolicy.HOME + "titulo/tv/1396"));
+            waitForJs(scenario, "document.querySelectorAll('.selectors select').length===2");
+            assertEquals("0", js(scenario, "document.querySelectorAll('.episode-list,.player-options').length"));
+            js(scenario, "document.querySelector('.player-cover button').click();true");
+            waitForJs(scenario, "!!document.querySelector('.videoFrame.server-selection iframe')");
+            assertEquals("true", js(scenario, "document.querySelector('.videoFrame').getBoundingClientRect().height>=390"));
+            assertEquals("true", js(scenario, "document.querySelector('.videoFrame iframe').src.endsWith('#noEpList')"));
+            saveScreenshot("Flix-player-ampliado.png");
+        }
+    }
+
+    @Test public void productionLiveTabShowsCatalogOrExplicitProviderFailure() throws Exception {
+        org.junit.Assume.assumeTrue("Production UI runs after merge", "true".equals(InstrumentationRegistry.getArguments().getString("liveCatalog")));
+        try (ActivityScenario<MainActivity> scenario = launch()) {
+            scenario.onActivity(a->a.testBrowser().loadUrl(NavigationPolicy.HOME + "ao-vivo"));
+            waitForJs(scenario, "!!document.querySelector('.live-tabs')");
+            waitForJs(scenario, "document.querySelectorAll('.live-placeholder').length===0");
+            assertEquals("true", js(scenario, "document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector('.bottom-nav a.active').textContent.indexOf('Ao vivo')>=0"));
+            assertEquals("true", js(scenario, "document.querySelector('.live-update').textContent.length>0"));
+            saveScreenshot("Flix-ao-vivo.png");
         }
     }
 

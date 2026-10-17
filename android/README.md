@@ -1,4 +1,14 @@
-# Flix Android · Cinema
+# Flix Android · Ao vivo
+
+Versão 0.3: canais e agenda, player simplificado, área de servidores maior e
+suporte a duração infinita de transmissões ao vivo no observador/PiP.
+Sessões ao vivo não recebem retomada de filmes nem entram no histórico VOD.
+Os contextos de mídia continuam restritos à rota correspondente no Flix.
+
+Fluxos de abertura assíncrona de janelas recebem o mesmo WebView invisível,
+sem rede nem scripts, usado nos pop-ups de clique. Isso evita retornar uma
+janela nula a provedores que aguardam essa abertura. A janela nunca é mostrada.
+Os testes cobrem essa compatibilidade; não confirmam o servidor alternativo real.
 
 Versão 0.2: navegação integrada ao site, sem barra nativa duplicada. O site
 mantém favoritos e histórico no armazenamento local do WebView.

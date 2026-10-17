@@ -20,4 +20,12 @@ public class NavigationPolicyTest {
         assertFalse(NavigationPolicy.isAdUrl("https://spartanamicus.com.evil.test/"));
         assertFalse(NavigationPolicy.isAdUrl("https://superflixapi.fun/filme/603"));
     }
+    @org.junit.Test public void playbackContextsAreRestrictedToTheirOwnScreens() {
+        org.junit.Assert.assertTrue(NavigationPolicy.matchesPlaybackPath("live:channel-sportv", "/ao-vivo"));
+        org.junit.Assert.assertTrue(NavigationPolicy.matchesPlaybackPath("live:event-final-2026", "/ao-vivo"));
+        org.junit.Assert.assertFalse(NavigationPolicy.matchesPlaybackPath("live:channel-sportv", "/titulo/movie/603"));
+        org.junit.Assert.assertFalse(NavigationPolicy.matchesPlaybackPath("movie:603", "/ao-vivo"));
+        org.junit.Assert.assertFalse(NavigationPolicy.isPlaybackKey("live:https://outside.example"));
+        org.junit.Assert.assertFalse(NavigationPolicy.isPlaybackKey("movie:abc"));
+    }
 }
