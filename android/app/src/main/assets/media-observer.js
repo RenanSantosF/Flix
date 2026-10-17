@@ -65,6 +65,9 @@
         if (error) failedVideos.set(video, {until:event === 'recovery-scan' ? (failedVideos.get(video) || {until:now}).until : now + 5000, signature:source.source + ':' + source.sourceReason, error:error});
         win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, source:source.source, sourceType:source.sourceType.slice(0,100),
           sourceKind:source.sourceKind, sourceReason:source.sourceReason,
+          frameUrl:error === 4 && win.location ? String(win.location.href).slice(0,4096) : '',
+          referrerPolicy:error === 4 ? String(win.document.referrerPolicy || '').slice(0,64) : '',
+          corsMode:error === 4 && video.hasAttribute && video.hasAttribute('crossorigin') ? (video.crossOrigin === 'use-credentials' ? 'use-credentials' : 'anonymous') : 'none',
           position:video.currentTime || 0, duration:live || !isFinite(duration) ? 0 : duration, live:live, error:error,
           playing:!video.paused && !video.ended, ended:video.ended}));
       }

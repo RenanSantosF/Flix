@@ -63,6 +63,8 @@ public final class MainActivity extends Activity {
     private NativePlayback nativePlayback;
     private androidx.media3.datasource.DataSource.Factory nativeTestSource;
     private final HashSet<String> recoveredSources = new HashSet<>();
+    private String recoverySource = "";
+    private final java.util.HashMap<String,String> recoveryFailures = new java.util.HashMap<>();
     private String observerScript = "";
     private String testHtml, testBootstrap, testManifest;
     private int mediaMessages;
@@ -101,7 +103,11 @@ public final class MainActivity extends Activity {
                     browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:"+event+"}))",null);
                 } catch(Exception ignored) { }
             }
-            @Override public void failed(String message) { notice(message); diagnostic(recoveryDiagnostic + " · " + message); }
+            @Override public void failed(String message) {
+                String failure=recoveryDiagnostic + " · " + message;
+                if(!recoverySource.isEmpty())recoveryFailures.put(recoverySource,failure);
+                notice(message);diagnostic(failure);
+            }
             @Override public void closed() { playbackActive=false;root.setKeepScreenOn(false);updatePipParams(); }
         });
         browser.setWebChromeClient(new WebChromeClient() {
@@ -235,7 +241,7 @@ public final class MainActivity extends Activity {
             if (!NavigationPolicy.isAppUrl(browser.getUrl() == null ? "" : browser.getUrl())) return;
             if (!"https".equals(sourceOrigin.getScheme())) return;
             try {
-                String raw = message.getData(); if (raw == null || raw.length() > 8192) return;
+                String raw = message.getData(); if (raw == null || raw.length() > 12288) return;
                 JSONObject data = new JSONObject(raw); String video = data.optString("videoId");
                 double duration = data.optDouble("duration", 0), position = data.optDouble("position", 0);
                 if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || position < 0 || position > 1e12) return;
@@ -244,17 +250,29 @@ public final class MainActivity extends Activity {
                 String recoveryReason = "erro de reprodução";
                 if(error==4&&(activeVideo.isEmpty()||activeVideo.equals(video))) {
                     String source=data.optString("source"),sourceType=data.optString("sourceType");
+                    // The browser may report the same error again after pause/scan.
+                    // Never replace the native HTTP/format/decoder failure with a
+                    // generic "already attempted" message or issue another request.
+                    if(recoveredSources.contains(source)) {
+                        String failure=recoveryFailures.get(source);
+                        if(failure!=null)diagnostic(failure);
+                        return;
+                    }
                     recoveryReason = recoveryReason(data, source);
                     if(MediaUrlPolicy.allowed(source)&&sourceType.length()<=100&&recoveredSources.size()<2&&recoveredSources.add(source)) {
+                        recoverySource=source;
                         recoveryDiagnostic = mediaDiagnostic(data, sourceOrigin.getHost(), "fonte enviada ao motor nativo");
                         diagnostic(recoveryDiagnostic);
                         activeVideo=video;activeReply=reply;
                         try { reply.postMessage(new JSONObject().put("type","pause").put("videoId",video).toString()); } catch(Exception ignored) { }
                         exitFullscreen();
                         try {
-                            nativePlayback.open(source,sourceType,sourceOrigin.toString(),browser.getSettings().getUserAgentString(),
+                            nativePlayback.open(source,sourceType,new MediaRequestContext(data.optString("frameUrl"),sourceOrigin.toString(),data.optString("referrerPolicy"),data.optString("corsMode")),browser.getSettings().getUserAgentString(),
                                 contextKey.startsWith("live:")?0:(position>0?Math.min(position,604800):resumePosition),selfTest()?nativeTestSource:null);
-                        } catch(RuntimeException failure) {nativePlayback.close(false);notice("Não foi possível preparar este vídeo. Tente o principal ou o legendado.");diagnostic(recoveryDiagnostic + " · falha ao preparar");}
+                        } catch(RuntimeException failure) {
+                            nativePlayback.close(false);notice("Não foi possível preparar este vídeo. Tente o principal ou o legendado.");
+                            String description=recoveryDiagnostic + " · falha ao preparar";recoveryFailures.put(source,description);diagnostic(description);
+                        }
                         return;
                     }
                 }
@@ -289,7 +307,7 @@ public final class MainActivity extends Activity {
 
     private void clearPlaybackContext() {
         if(nativePlayback!=null)nativePlayback.close(false);
-        recoveredSources.clear(); recoveryDiagnostic = ""; diagnostic("");
+        recoveredSources.clear(); recoveryFailures.clear(); recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
         contextKey = ""; activeVideo = ""; activeReply = null; resumePosition = 0; playbackActive = false;
         restoredVideos.clear(); root.setKeepScreenOn(false); updatePipParams();
     }
@@ -313,10 +331,12 @@ public final class MainActivity extends Activity {
         String frame = host != null && host.matches("[a-zA-Z0-9.-]{1,253}") ? host : "frame";
         android.content.pm.PackageInfo engine = WebView.getCurrentWebViewPackage();
         String version = engine == null ? "?" : engine.versionName;
-        // Only versions, source scheme, frame hostname and fixed reasons. Never paths,
+        String mediaHost="";
+        try {String value=java.net.URI.create(data.optString("source")).getHost();if(value!=null&&value.matches("[a-zA-Z0-9.-]{1,253}"))mediaHost=" · mídia "+value;}catch(RuntimeException ignored) { }
+        // Only versions, source scheme, frame/media hostname and fixed reasons. Never paths,
         // query strings, cookies, provider HTML or signed media addresses.
         return "Flix " + BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ") · WebView " + version
-            + " · " + frame + " · fonte " + kind + " · " + reason;
+            + " · " + frame + " · fonte " + kind + mediaHost + " · " + reason;
     }
     private void diagnostic(String text) {
         if (browser != null && !destroyed) browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:diagnostic',{detail:" + JSONObject.quote(text) + "}))", null);
@@ -389,7 +409,7 @@ public final class MainActivity extends Activity {
         nativeTestSource=()->new androidx.media3.datasource.DataSource() {
             private androidx.media3.datasource.ByteArrayDataSource delegate;
             @Override public long open(androidx.media3.datasource.DataSpec spec) throws java.io.IOException {
-                byte[] bytes=spec.uri.getPath().endsWith(".m3u8")?testManifest.getBytes(StandardCharsets.UTF_8):segment;
+                byte[] bytes=(spec.uri.getPath().endsWith(".m3u8")||spec.uri.getPath().endsWith("/test-stream"))?testManifest.getBytes(StandardCharsets.UTF_8):segment;
                 delegate=new androidx.media3.datasource.ByteArrayDataSource(bytes);return delegate.open(spec);
             }
             @Override public int read(byte[] buffer,int offset,int length) throws java.io.IOException {return delegate.read(buffer,offset,length);}

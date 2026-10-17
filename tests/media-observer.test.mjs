@@ -14,6 +14,7 @@ function fixture(){
  const win={HTMLVideoElement:Video,HTMLSourceElement:class{},HTMLMediaElement:{NETWORK_NO_SOURCE:3},URL,
   performance:{now:()=>time,getEntriesByType:()=>resources},
   PerformanceObserver:class{constructor(callback){resourceObserver=callback}observe(){}},
+  location:{href:'https://player.example/embed/123?token=private#play'},
   FlixMedia:{postMessage:m=>messages.push(JSON.parse(m))},
   document:{addEventListener:(name,callback)=>{listeners[name]=callback},querySelectorAll:s=>s==='video'?videos:[]},
   setInterval:callback=>{scan=callback},setTimeout:callback=>callback(),addEventListener(){}};
@@ -53,4 +54,9 @@ test('non-HTTPS and missing sources stay local diagnostics, never native fetch c
 test('a new video load does not reuse the previous video manifest',()=>{
  const f=fixture();f.video.src='blob:https://player.example/new';f.resource('https://cdn.example/previous.m3u8');f.advance(2000);f.emit('loadstart');f.error();assert.equal(f.messages.at(-1).source,'');
  f.resource('https://cdn.example/current.m3u8');f.scan();assert.equal(f.messages.at(-1).source,'https://cdn.example/current.m3u8');
+});
+
+test('recovery includes declared page context only on an error, for the local decoder',()=>{
+ const f=fixture();f.video.src='https://cdn.example/v.mp4';f.video.duration=60;f.video.hasAttribute=()=>true;f.video.crossOrigin='anonymous';
+ f.emit('playing');assert.equal(f.messages.at(-1).frameUrl,'');f.error();assert.equal(f.messages.at(-1).frameUrl,'https://player.example/embed/123?token=private#play');assert.equal(f.messages.at(-1).corsMode,'anonymous');
 });
