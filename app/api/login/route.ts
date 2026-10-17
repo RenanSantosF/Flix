@@ -1,4 +1,0 @@
-import {NextRequest,NextResponse} from 'next/server';
-import {timingSafeEqual} from 'crypto';
-import {sign} from '../../../lib/auth';
-export async function POST(req:NextRequest){const {password}=await req.json().catch(()=>({password:''}));const expected=process.env.SITE_PASSWORD;if(!expected||!process.env.SESSION_SECRET||process.env.SESSION_SECRET.length<32)return NextResponse.json({error:'Configure SITE_PASSWORD e SESSION_SECRET na Vercel.'},{status:503});const a=Buffer.from(String(password||''));const b=Buffer.from(expected);if(a.length!==b.length||!timingSafeEqual(a,b))return NextResponse.json({error:'Senha incorreta'},{status:401});const res=NextResponse.json({ok:true});res.cookies.set('flix_session',await sign(),{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'lax',path:'/',maxAge:604800});return res}
