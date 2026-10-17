@@ -18,6 +18,13 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class PopupBlockingTest {
+    private String clip() throws Exception {
+        try (java.io.InputStream stream = InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("clip.base64")) {
+            java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream(); byte[] buffer = new byte[4096]; int read;
+            while ((read = stream.read(buffer)) != -1) bytes.write(buffer, 0, read);
+            return bytes.toString("UTF-8").trim();
+        }
+    }
     private ActivityScenario<MainActivity> launch() {
         Context context = ApplicationProvider.getApplicationContext();
         Intent intent = new Intent(context, MainActivity.class).putExtra(MainActivity.EXTRA_SELF_TEST, true);
@@ -107,6 +114,38 @@ public class PopupBlockingTest {
             tap(scenario, 50, 32); waitForCount(scenario, true, 1);
             waitForJs(scenario, "!document.querySelector('video').paused && document.querySelector('video').currentTime > 0.2");
             assertEquals("\"Popup test\"", js(scenario, "document.title"));
+        }
+    }
+
+    @Test public void reportsRealMediaPositionAndRestoresSavedPosition() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = launch()) {
+            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video><script>window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
+            waitForJs(scenario, "!!window.FlixControl");
+            js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
+            tap(scenario, 50, 32);
+            waitForJs(scenario, "window.lastProgress && window.lastProgress.key==='movie:603' && window.lastProgress.position>=0.65 && window.lastProgress.playing");
+            js(scenario, "document.querySelector('video').pause();true");
+            waitForJs(scenario, "window.lastProgress && !window.lastProgress.playing");
+        }
+    }
+
+    @Test public void videoContinuesInPictureInPictureWhenLeavingTheApp() throws Exception {
+        try (ActivityScenario<MainActivity> scenario = launch()) {
+            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><style>.flix-pip video{position:fixed;inset:0;width:100vw;height:100vh;background:black;}</style><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video>");
+            waitForJs(scenario, "!!window.FlixControl");
+            js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0}));true");
+            tap(scenario, 50, 32);
+            waitForJs(scenario, "document.querySelector('video').currentTime>0.2");
+            long deadline=SystemClock.uptimeMillis()+5000;
+            AtomicReference<Boolean> active=new AtomicReference<>(false);
+            while(SystemClock.uptimeMillis()<deadline){scenario.onActivity(a->active.set(a.isPlaybackActive()));if(active.get())break;SystemClock.sleep(100);}
+            assertTrue("Native media observer must detect playback",active.get());
+            // Real Android Home key exercises onUserLeaveHint, not just the explicit PiP button.
+            InstrumentationRegistry.getInstrumentation().getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME);
+            AtomicReference<Boolean> pip=new AtomicReference<>(false);deadline=SystemClock.uptimeMillis()+8000;
+            while(SystemClock.uptimeMillis()<deadline){scenario.onActivity(a->pip.set(a.isInPictureInPictureMode()));if(pip.get())break;SystemClock.sleep(150);}
+            assertTrue("Activity must enter PiP",pip.get());
+            waitForJs(scenario, "!document.querySelector('video').paused && document.body.classList.contains('flix-pip')");
         }
     }
 }

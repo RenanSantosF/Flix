@@ -1,0 +1,2 @@
+import {Header,BottomNav} from '../components/AppShell';
+export default function Loading(){return <main className="app-page" aria-label="Carregando catálogo" aria-busy="true"><Header/><div className="loading-page"><div className="loading-hero poster-skeleton"/><div className="loading-bar"/></div><div className="poster-grid">{Array.from({length:12},(_,i)=><div key={i} className="poster-skeleton"/>)}</div><BottomNav/></main>;}

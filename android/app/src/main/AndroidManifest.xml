@@ -6,6 +6,8 @@
         android:supportsRtl="true" android:usesCleartextTraffic="false"
         android:hardwareAccelerated="true">
         <activity android:name=".MainActivity" android:exported="true"
+            android:supportsPictureInPicture="true"
+            android:resizeableActivity="true"
             android:enableOnBackInvokedCallback="false"
             android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize">
             <intent-filter>

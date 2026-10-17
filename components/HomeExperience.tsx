@@ -1,0 +1,45 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import Link from 'next/link';
+import {Header,BottomNav} from './AppShell';
+import Icon from './Icons';
+import {PosterCard,ContinueCard,FavoriteButton,useLibrary} from './Library';
+import {imageUrl,titleHref,titleKey} from '../lib/catalog';
+import type {Title} from '../lib/catalog';
+type Props={movies:Title[];films:Title[];series:Title[];configured:boolean;initialView:'home'|'search'|'list'};
+export default function Home({movies,films,series,configured,initialView}:Props) {
+  const {favorites,history,ready}=useLibrary();
+  const [view,setView]=useState(initialView),[filter,setFilter]=useState<'all'|'movie'|'tv'>('all');
+  const [query,setQuery]=useState(''),[results,setResults]=useState<Title[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState('');
+  const [page,setPage]=useState(1),[totalPages,setTotalPages]=useState(1),[retry,setRetry]=useState(0);
+  const searchRef=useRef<HTMLInputElement>(null);
+  useEffect(()=>{setView(initialView);setFilter('all');setQuery('');setPage(1);setError('');if(initialView==='search')setTimeout(()=>searchRef.current?.focus(),100)},[initialView]);
+  useEffect(()=>{
+    if(view!=='search'||query.trim().length<2){setResults([]);setBusy(false);return;}
+    const controller=new AbortController();setBusy(true);setError('');
+    const timer=setTimeout(async()=>{
+      try {
+        const response=await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&page=${page}`,{signal:controller.signal});
+        if(!response.ok)throw Error();const data=await response.json();
+        if(!controller.signal.aborted){setResults(previous=>page===1?data.results:[...previous,...data.results.filter((t:Title)=>!previous.some(p=>titleKey(p)===titleKey(t)))]);setTotalPages(data.total_pages||1);}
+      }catch{if(!controller.signal.aborted)setError('A busca não carregou. Vamos tentar de novo?');}
+      finally{if(!controller.signal.aborted)setBusy(false);}
+    },300);
+    return()=>{clearTimeout(timer);controller.abort()};
+  },[query,page,view,retry]);
+  const continuing=history.filter(h=>!h.completed);
+  const feature=(filter==='movie'?films:filter==='tv'?series:movies).find(t=>t.backdrop_path);
+  const filtered=(titles:Title[])=>filter==='all'?titles:titles.filter(t=>t.media_type===filter);
+  function rail(label:string,titles:Title[],rank=false){return titles.length>0&&<section className="shelf"><div className="section-heading"><h2>{label}</h2><span>{titles.length} títulos</span></div><div className="poster-rail">{titles.map((title,index)=><PosterCard key={titleKey(title)} title={title} index={rank?index:undefined}/>)}</div></section>}
+  return <main className="app-page"><Header/>
+    {view==='home'&&<><div className="browse-tabs" role="group" aria-label="Filtrar catálogo">{([{id:'all',label:'Para você'},{id:'movie',label:'Filmes'},{id:'tv',label:'Séries'}] as const).map(tab=><button type="button" key={tab.id} className={filter===tab.id?'selected':''} aria-pressed={filter===tab.id} onClick={()=>setFilter(tab.id)}>{tab.label}</button>)}<Link href="/?view=list">Minha lista <Icon name="chevron" size={14}/></Link></div>
+    {feature&&<section className="feature-hero" key={titleKey(feature)}><img className="feature-image" src={imageUrl(feature.backdrop_path,'w1280')} alt="" fetchPriority="high"/><div className="feature-shade"/><div className="feature-copy"><span className="feature-badge"><span/> EM DESTAQUE</span><div className="feature-meta"><span>{feature.media_type==='tv'?'SÉRIE':'FILME'}</span><span>{feature.release_date?.slice(0,4)}</span>{!!feature.vote_average&&<span className="rating">★ {feature.vote_average.toFixed(1)}</span>}</div><h1>{feature.title}</h1><p>{feature.overview}</p><div className="feature-actions"><Link className="button button-light" href={titleHref(feature)+'?play=1'}><Icon name="play" size={19}/>Assistir</Link><FavoriteButton title={feature} compact/><Link className="feature-info" href={titleHref(feature)}>Detalhes <Icon name="chevron" size={16}/></Link></div></div><span className="feature-index">ESCOLHA DO DIA <i/></span></section>}
+    <div className="home-content">{ready&&filtered(continuing.map(h=>h.title)).length>0&&<section className="shelf continue-shelf"><div className="section-heading"><h2>Continuar assistindo<span className="heading-dot"/></h2><Link href="/?view=list">Ver tudo <Icon name="chevron" size={14}/></Link></div><div className="continue-rail">{continuing.filter(h=>filter==='all'||h.title.media_type===filter).map(h=><ContinueCard key={titleKey(h.title)} entry={h}/>)}</div></section>}
+    {!configured?<section className="empty-state"><Icon name="play" size={36}/><h2>O catálogo está sendo preparado</h2><p>Volte em instantes para descobrir suas próximas histórias.</p></section>:<>{rail('Em alta agora',filtered(movies))}{filter!=='tv'&&rail('Filmes para a sua próxima sessão',films)}{filter!=='movie'&&rail('Séries que prendem',series)}{favorites.length>0&&rail('Da sua lista',filtered(favorites))}{rail('O público está assistindo',filtered([...films,...series].filter(t=>(t.vote_average||0)>=7).sort((a,b)=>(b.vote_average||0)-(a.vote_average||0)).slice(0,10)),true)}{movies.length===0&&films.length===0&&series.length===0&&<div className="empty-state"><h2>O catálogo não carregou</h2><p>Confira sua conexão e tente novamente.</p><button className="button button-glass" onClick={()=>location.reload()}><Icon name="refresh"/>Tentar novamente</button></div>}</>}
+    <footer className="app-footer"><span className="wordmark">FLIX<span>·</span></span><p>Sua próxima história está aqui.</p></footer></div></>}
+    {view==='search'&&<section className="library-page"><div className="page-heading"><span className="eyebrow">DESCUBRA SUA PRÓXIMA HISTÓRIA</span><h1>O que vamos assistir?</h1></div><form className="search-field" onSubmit={e=>{e.preventDefault();searchRef.current?.blur()}} role="search"><Icon name="search"/><input ref={searchRef} aria-label="Buscar filmes e séries" placeholder="Filmes, séries e novas descobertas" type="search" value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}} autoComplete="off" enterKeyHint="search"/>{query&&<button className="icon-button" type="button" aria-label="Limpar busca" onClick={()=>{setQuery('');setPage(1);searchRef.current?.focus()}}><Icon name="close" size={18}/></button>}</form><div className="filter-chips" role="group" aria-label="Tipo de resultado">{([{id:'all',label:'Tudo'},{id:'movie',label:'Filmes'},{id:'tv',label:'Séries'}] as const).map(tab=><button key={tab.id} aria-pressed={filter===tab.id} className={filter===tab.id?'selected':''} onClick={()=>setFilter(tab.id)}>{tab.label}</button>)}</div>
+    <div className="section-heading"><h2>{query.trim().length>=2?'Resultados da busca':'Explore o catálogo'}</h2>{busy&&<span role="status">Buscando…</span>}</div>{error?<div className="empty-state" role="alert"><p>{error}</p><button className="button button-glass" onClick={()=>setRetry(n=>n+1)}>Tentar novamente</button></div>:<><div className="poster-grid" aria-busy={busy}>{(query.trim().length>=2?filtered(results):filtered(movies)).map(t=><PosterCard key={titleKey(t)} title={t}/>)}{busy&&results.length===0&&Array.from({length:9},(_,i)=><div key={i} className="poster-skeleton"/>)}</div>{query.trim().length>=2&&!busy&&!filtered(results).length&&<div className="empty-state"><Icon name="search" size={32}/><h2>Nenhum título por aqui</h2><p>Tente outro nome ou selecione “Tudo”.</p></div>}{query.trim().length>=2&&page<totalPages&&<button className="button button-glass load-more" disabled={busy} onClick={()=>setPage(p=>p+1)}>{busy?'Carregando…':'Mostrar mais resultados'}</button>}</>}</section>}
+    {view==='list'&&<section className="library-page"><div className="page-heading"><span className="eyebrow">SEU ESPAÇO</span><h1>Minha lista<span className="accent">.</span></h1><p>As histórias que você guarda. E as que ainda quer terminar.</p></div>{ready&&continuing.length>0&&<section className="shelf"><div className="section-heading"><h2>Continuar assistindo</h2><Icon name="clock" size={18}/></div><div className="continue-rail">{continuing.map(h=><ContinueCard key={titleKey(h.title)} entry={h}/>)}</div></section>}<div className="section-heading"><h2>Salvos para depois</h2><span>{favorites.length} títulos</span></div><div className="poster-grid">{favorites.map(t=><PosterCard key={titleKey(t)} title={t}/>)}</div>{ready&&!favorites.length&&<div className="empty-state"><span className="empty-icon"><Icon name="plus" size={32}/></span><h2>Sua lista começa com uma escolha</h2><p>Toque no + de um título para guardá-lo aqui.</p><Link href="/" className="button button-light">Explorar catálogo</Link></div>}<p className="local-note">Sua lista e seu histórico ficam salvos neste dispositivo.</p></section>}
+    <BottomNav active={view}/>
+  </main>;
+}
