@@ -40,13 +40,18 @@ jobs:
           timeout 120 adb wait-for-device
           timeout 180 bash -c 'until adb shell getprop sys.boot_completed | tr -d "\r" | grep -q 1; do sleep 2; done'
           adb shell input keyevent 82
-          gradle --no-daemon :app:connectedDebugAndroidTest
+          if test "$GITHUB_EVENT_NAME" = push; then
+            gradle --no-daemon :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.liveCatalog=true
+          else
+            gradle --no-daemon :app:connectedDebugAndroidTest
+          fi
       - name: Collect APK and reports
         if: always()
         run: |
           mkdir -p android/output
           if test -f android/app/build/outputs/apk/debug/app-debug.apk; then cp android/app/build/outputs/apk/debug/app-debug.apk android/output/Flix-Android-teste.apk; fi
-          adb logcat -d > android/output/emulator-logcat.txt 2>/dev/null || true
+          python3 -c 'import glob,os,shutil; paths=glob.glob(os.environ["ANDROID_HOME"]+"/build-tools/*/lib/apksigner.jar"); shutil.copy2(sorted(paths)[-1],"android/output/apksigner.jar") if paths else None'
+          timeout 15 adb logcat -d > android/output/emulator-logcat.txt 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -55,5 +60,6 @@ jobs:
             android/output/
             android/app/build/reports/
             android/app/build/outputs/androidTest-results/
+            android/app/build/outputs/connected_android_test_additional_output/
             android/emulator.log
           retention-days: 14
