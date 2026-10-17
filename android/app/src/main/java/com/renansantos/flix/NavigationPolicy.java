@@ -8,6 +8,14 @@ final class NavigationPolicy {
     static final String HOME = "https://" + APP_HOST + "/";
     private static final String[] AD_HOSTS = {"asiafilm.org", "budgetezy.org", "spartanamicus.com", "linkonclick.com"};
 
+    static boolean isPlaybackKey(String key) {
+        return key != null && (key.matches("(movie|tv):[0-9]{1,12}") || key.matches("live:(channel|event)-[a-z0-9_-]{1,100}"));
+    }
+
+    static boolean matchesPlaybackPath(String key, String path) {
+        return isPlaybackKey(key) && (key.startsWith("live:") ? "/ao-vivo".equals(path) : ("/titulo/" + key.replace(':', '/')).equals(path));
+    }
+
     static boolean isAppUrl(String value) {
         try {
             URI uri = URI.create(value);

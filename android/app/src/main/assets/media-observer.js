@@ -8,15 +8,15 @@
       var prefix = Math.random().toString(36).slice(2) + ':';
       function send(video, event) {
         if (!(video instanceof win.HTMLVideoElement)) return;
-        var duration = video.duration;
-        if (!isFinite(duration) || duration <= 0 || duration > 604800) return;
+        var duration = video.duration, live = duration === Infinity, error = video.error ? video.error.code : 0;
+        if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
         var id = ids.get(video);
         if (!id) { id = prefix + (++next); ids.set(video, id); videos[id] = video; }
         var now = Date.now();
         if (event === 'timeupdate' && now - lastTime < 1000) return;
         lastTime = now;
         win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event,
-          position:video.currentTime || 0, duration:duration,
+          position:video.currentTime || 0, duration:live || !isFinite(duration) ? 0 : duration, live:live, error:error,
           playing:!video.paused && !video.ended, ended:video.ended}));
       }
       win.FlixMedia.onmessage = function (event) {
@@ -28,7 +28,7 @@
           } else if (data.type === 'pause') { video.pause(); send(video, 'pause'); }
         } catch (_) {}
       };
-      ['loadedmetadata','durationchange','play','playing','pause','ended','seeked','timeupdate'].forEach(function (event) {
+      ['error','loadedmetadata','durationchange','play','playing','pause','ended','seeked','timeupdate'].forEach(function (event) {
         win.document.addEventListener(event, function (e) { send(e.target, event); }, true);
       });
       function scan() {

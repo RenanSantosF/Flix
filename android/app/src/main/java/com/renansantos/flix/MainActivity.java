@@ -157,7 +157,8 @@ public final class MainActivity extends Activity {
         WebSettings settings = browser.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
         settings.setUserAgentString(settings.getUserAgentString() + " FlixAndroid/1.0");
-        settings.setSupportMultipleWindows(true); settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        // Async provider flows also receive the same offline popup sink. No new window is displayed.
+        settings.setSupportMultipleWindows(true); settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(true);
@@ -193,15 +194,15 @@ public final class MainActivity extends Activity {
                 if ("clear".equals(type)) clearPlaybackContext();
                 else if ("pip".equals(type)) enterPlayerPip();
                 else if ("context".equals(type)) {
-                    String key = data.optString("key"); if (!key.matches("(movie|tv):[0-9]{1,12}")) return;
+                    String key = data.optString("key"); if (!NavigationPolicy.isPlaybackKey(key)) return;
                     String path = android.net.Uri.parse(browser.getUrl() == null ? "" : browser.getUrl()).getPath();
                     boolean test = BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false);
-                    if (!test && !("/titulo/" + key.replace(':', '/')).equals(path)) return;
+                    if (!test && !NavigationPolicy.matchesPlaybackPath(key, path)) return;
                     clearPlaybackContext(); contextKey = key;
                     contextSeason = Math.max(0, Math.min(10000, data.optInt("season", 1)));
                     contextEpisode = Math.max(1, Math.min(10000, data.optInt("episode", 1)));
                     double position = data.optDouble("resume", 0);
-                    resumePosition = Double.isFinite(position) ? Math.max(0, Math.min(604800, position)) : 0;
+                    resumePosition = !key.startsWith("live:") && Double.isFinite(position) ? Math.max(0, Math.min(604800, position)) : 0;
                 }
             } catch (Exception ignored) { }
         });
@@ -215,7 +216,16 @@ public final class MainActivity extends Activity {
                 String raw = message.getData(); if (raw == null || raw.length() > 1024) return;
                 JSONObject data = new JSONObject(raw); String video = data.optString("videoId");
                 double duration = data.optDouble("duration", 0), position = data.optDouble("position", 0);
-                if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || duration <= 0 || duration > 604800 || position < 0) return;
+                if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || position < 0 || position > 1e12) return;
+                int error = data.optInt("error", 0);
+                if (error >= 1 && error <= 4 && (activeVideo.isEmpty() || activeVideo.equals(video))) {
+                    playbackActive = false; root.setKeepScreenOn(false); updatePipParams();
+                    JSONObject failure = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode).put("error", error);
+                    browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + failure + "}))", null);
+                    return;
+                }
+                boolean live = contextKey.startsWith("live:") && data.optBoolean("live", false) && duration == 0;
+                if (!live && (duration <= 0 || duration > 604800)) return;
                 boolean playing = data.optBoolean("playing", false);
                 if (playing || activeVideo.isEmpty()) { activeVideo = video; activeReply = reply; }
                 if (!video.equals(activeVideo)) return;
@@ -227,7 +237,7 @@ public final class MainActivity extends Activity {
                 }
                 playbackActive = playing; root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
-                    .put("position", Math.min(position, duration)).put("duration", duration).put("playing", playing).put("ended", data.optBoolean("ended", false));
+                    .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
             } catch (Exception ignored) { }
         });

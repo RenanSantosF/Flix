@@ -1,30 +1,48 @@
 # Flix
 
-Projeto Next.js para Vercel sem login. Catálogo e busca TMDB ativados por `TMDB_TOKEN`.
+Aplicativo pessoal Next.js/Android. Catálogo e busca de filmes e séries via TMDB
+(`TMDB_TOKEN`, somente no servidor); reprodução e programação via SuperFlixAPI.
 
-## Publicação
-1. Importe o repositório na Vercel.
-2. Faça deploy e copie o domínio gerado `.vercel.app`.
-3. Crie sua chave TMDB em https://www.themoviedb.org/settings/api.
-4. Em Vercel > Project > Settings > Environment Variables, adicione `TMDB_TOKEN` com o API Read Access Token.
-5. Faça Redeploy.
+## Player
 
-O catálogo TMDB não fornece vídeos. Reprodução requer fontes autorizadas. Não envie o token ao GitHub.
+Um único embed oficial, sem modos experimentais nem entrada de URL direta.
+Séries usam `/serie/{TMDB}/{temporada}/{episodio}#noEpList`, com apenas um
+seletor de episódios no Flix. Filmes usam `/filme/{TMDB}#noLink`.
+A escolha de servidores tem altura maior; ao detectar vídeo no Android,
+a área volta à proporção de reprodução. As permissões do iframe seguem a
+integração documentada pelo provedor. Pop-ups são contidos pelo cliente Android.
+O navegador comum usa o iframe oficial e as próprias regras de pop-up do navegador.
 
-## Player filtrado (experimental)
+## Canais e esportes
 
-O modo Filtrado tenta primeiro uma leitura CORS pelo navegador e, se ela não
-for permitida, tenta a leitura pelo servidor. Busca somente documentos HTML
-de reprodução da SuperFlixAPI,
-remove as assinaturas de publicidade observadas e mantém o documento isolado
-por sandbox no iframe e na resposta HTTP. Não encaminha cookies nem credenciais
-do visitante ao provedor. Verificações humanas e recusas de acesso encerram a
-tentativa; o modo não tenta contorná-las. O provedor pode bloquear requisições
-do servidor ou depender de recursos incompatíveis com essa filtragem.
+`/ao-vivo` é uma aba principal e tem acesso destacado no início.
+`/api/live` consulta `/lista?category=canais&format=json` e
+`/lista?category=eventos&format=json`, com cache de 60 segundos e timeout.
+Busca por canal/time/competição, categorias derivadas dos canais, canais
+favoritos locais, agenda e filtro de eventos explicitamente marcados ao vivo.
+Horários com offset são exibidos em Brasília; datas sem fuso mantêm o horário
+informado pelo provedor, com data e hora legíveis. Nunca inferimos que um jogo está ao vivo só pelo horário.
 
-Os demais modos continuam disponíveis no seletor do player. A filtragem não
-garante a reprodução nem remove anúncios embutidos no próprio vídeo. Conteúdo
-lido pelo navegador é exibido em `srcdoc` com sandbox, sem origem compartilhada
-com o aplicativo. Erros do provedor são diferenciados no cabeçalho `X-Player-Error`.
+URLs de reprodução vêm da resposta oficial e precisam pertencer ao domínio
+SuperFlixAPI HTTPS. `play_event_url` preserva os canais vinculados ao evento.
+Nenhum endpoint de vídeo é adivinhado e não há proxy de HTML/stream.
+Respostas inválidas ou recusas não se tornam listas vazias silenciosas.
+Se a consulta falhar, o usuário pode tentar a página de canais/agenda do próprio
+provedor dentro do player protegido do app. A disponibilidade e a permissão de
+embed dessas páginas dependem do provedor.
 
-Validação (Node.js 22.6 ou superior): `npm test` e `npm run build`.
+Validação: a rota do backend consultou o catálogo público real com HTTP 200
+(327 canais e 265 eventos em 17/10/2026). Os campos `logo_url`, `embed_url`,
+`start_time`, `category` e `embeds[].provider` foram conferidos na resposta real
+e têm teste de regressão. A disponibilidade do catálogo muda com a programação.
+A página de reprodução exige verificação humana neste ambiente; não foi contornada. O servidor alternativo é
+controlado pelo provedor; testes sintéticos de compatibilidade não comprovam
+sua disponibilidade real.
+
+## Publicação e validação
+
+Importar o repositório na Vercel e configurar `TMDB_TOKEN` com um Read Access
+Token da TMDB. O token nunca deve ir para o cliente ou para o GitHub.
+`npm test` e `npm run build` (Node.js 22.6+). O workflow Android também executa
+unitários, lint, testes de pop-ups síncronos/assíncronos, retomada, PiP e duração
+de transmissão ao vivo; gera APK e relatórios. Ver `android/README.md` para assinatura.
