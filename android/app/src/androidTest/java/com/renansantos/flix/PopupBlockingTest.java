@@ -229,7 +229,7 @@ public class PopupBlockingTest {
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
             js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
-            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.7-player (7)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.8-player (8)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
             saveScreenshot("Flix-recuperacao-blob.png");
         }
@@ -291,6 +291,52 @@ public class PopupBlockingTest {
             assertTrue(android.security.NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("cdn.provider.example"));
             saveScreenshot("Flix-recuperacao-302.png");
         }
+    }
+
+    @Test public void rateLimitWaitsForRetryAfterThenAutomaticallyPlaysOnce() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            final byte[] bytes;
+            try(java.io.InputStream stream=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("recovery-clip.base64")) {
+                java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();byte[] buffer=new byte[4096];int n;while((n=stream.read(buffer))!=-1)output.write(buffer,0,n);
+                bytes=android.util.Base64.decode(output.toByteArray(),android.util.Base64.DEFAULT);
+            }
+            scenario.onActivity(a->a.nativeTestRateLimitClip(bytes,2,false));
+            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastProgress=null;window.lastNotice='';window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail});window.addEventListener('flix:notice',function(e){window.lastNotice=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
+            long start=SystemClock.elapsedRealtime();
+            js(scenario,"FlixMedia.postMessage(JSON.stringify({videoId:'limit:1',error:4,position:0,duration:0,source:'https://rate-fixture.example/video.mp4',sourceKind:'https'}));true");
+            waitForJs(scenario,"window.lastNotice.indexOf('HTTP 429')>=0");
+            AtomicReference<Integer> count=new AtomicReference<>(0);scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(1,(int)count.get());
+            saveScreenshot("Flix-espera-429.png");
+            waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
+            assertTrue(SystemClock.elapsedRealtime()-start>=2000);
+            scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(2,(int)count.get());
+            waitForJs(scenario,"window.lastNotice===''");saveScreenshot("Flix-recuperacao-429.png");
+        }
+    }
+
+    @Test public void longCooldownSurvivesAPlaybackContextReloadWithoutAnotherRequest() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            scenario.onActivity(a->a.nativeTestRateLimitClip(new byte[0],3600,true));
+            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastNotice='';window.addEventListener('flix:notice',function(e){window.lastNotice=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            String context="FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true";
+            String media="FlixMedia.postMessage(JSON.stringify({videoId:'long-limit:1',error:4,position:0,duration:0,source:'https://long-rate-fixture.example/video.mp4',sourceKind:'https'}));true";
+            js(scenario,context);js(scenario,media);waitForJs(scenario,"window.lastNotice.indexOf('HTTP 429')>=0");
+            AtomicReference<Integer> count=new AtomicReference<>(0);scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(1,(int)count.get());
+            js(scenario,"window.lastNotice='';true");js(scenario,context);js(scenario,media);waitForJs(scenario,"window.lastNotice.indexOf('HTTP 429')>=0");
+            scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(1,(int)count.get());
+        }
+    }
+
+    @Test public void cooldownStoreRetainsOnlyHostAndDeadlineAcrossNewStoreInstances() {
+        android.content.SharedPreferences preferences=ApplicationProvider.getApplicationContext().getSharedPreferences("rate-test-store",android.content.Context.MODE_PRIVATE);
+        preferences.edit().clear().commit();long until=System.currentTimeMillis()+60000;
+        new MediaCooldownStore(preferences).put("cdn.example",new MediaRateLimit.Deadline(until,true));
+        MediaRateLimit.Deadline restored=new MediaCooldownStore(preferences).get("cdn.example");
+        assertNotNull(restored);assertEquals(until,restored.until);assertTrue(restored.supplied);assertEquals(2,preferences.getAll().size());
+        preferences.edit().clear().commit();
     }
 
     @Test public void unsupportedVideoWithoutHttpsSourceCannotInvokeNativeRecovery() throws Exception {

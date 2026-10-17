@@ -68,6 +68,7 @@ public final class MainActivity extends Activity {
     private String observerScript = "";
     private String testHtml, testBootstrap, testManifest;
     private int mediaMessages;
+    private boolean nativeWaitingNotice;
     private String lastMediaOrigin = "", recoveryDiagnostic = "";
     private boolean selfTest() { return BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false); }
 
@@ -97,12 +98,14 @@ public final class MainActivity extends Activity {
             @Override public void progress(double position,double duration,boolean playing,boolean ended) {
                 if(contextKey.isEmpty()||destroyed)return;
                 playbackActive=playing;root.setKeepScreenOn(playing);updatePipParams();
+                if(playing&&nativeWaitingNotice&&nativePlayback!=null&&!nativePlayback.isWaiting()){nativeWaitingNotice=false;notice("");diagnostic("");}
                 try {
                     JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode)
                         .put("position",position).put("duration",duration).put("playing",playing).put("ended",ended);
                     browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:"+event+"}))",null);
                 } catch(Exception ignored) { }
             }
+            @Override public void waiting(String message) {nativeWaitingNotice=true;notice(message);diagnostic(recoveryDiagnostic+" · "+message);}
             @Override public void failed(String message) {
                 String failure=recoveryDiagnostic + " · " + message;
                 if(!recoverySource.isEmpty())recoveryFailures.put(recoverySource,failure);
@@ -307,7 +310,7 @@ public final class MainActivity extends Activity {
 
     private void clearPlaybackContext() {
         if(nativePlayback!=null)nativePlayback.close(false);
-        recoveredSources.clear(); recoveryFailures.clear(); recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
+        recoveredSources.clear(); recoveryFailures.clear(); nativeWaitingNotice=false; recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
         contextKey = ""; activeVideo = ""; activeReply = null; resumePosition = 0; playbackActive = false;
         restoredVideos.clear(); root.setKeepScreenOn(false); updatePipParams();
     }
@@ -377,6 +380,7 @@ public final class MainActivity extends Activity {
         if (inPip) { root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
         else { restoreInlineLayout(); root.requestApplyInsets(); }
     }
+    @Override protected void onStart() {super.onStart();if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
         super.onStop();
         if (!enteringPip && !isInPictureInPictureMode() && nativePlayback!=null)nativePlayback.pause();
@@ -433,6 +437,19 @@ public final class MainActivity extends Activity {
         nativeTestSource=new androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(client);
     }
     int nativeTestRedirectCount(){return testRedirects.get();}
+    private final java.util.concurrent.atomic.AtomicInteger testLimitedRequests=new java.util.concurrent.atomic.AtomicInteger();
+    void nativeTestRateLimitClip(byte[] clip,int seconds,boolean alwaysLimited) {
+        if(!selfTest())throw new IllegalStateException("Debug fixture only");
+        MediaRateLimit limiter=new MediaRateLimit(new MediaRateLimit.MemoryStore(),System::currentTimeMillis);
+        okhttp3.OkHttpClient client=new okhttp3.OkHttpClient.Builder().followRedirects(false)
+            .addInterceptor(new MediaRedirectInterceptor()).addInterceptor(limiter).addInterceptor(chain->{
+                int call=testLimitedRequests.incrementAndGet();okhttp3.Response.Builder response=new okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1);
+                if(call==1||alwaysLimited)return response.code(429).message("Too Many Requests").header("Retry-After",String.valueOf(seconds))
+                    .body(okhttp3.ResponseBody.create(okhttp3.MediaType.parse("text/plain"),new byte[0])).build();
+                return response.code(200).message("OK").body(okhttp3.ResponseBody.create(okhttp3.MediaType.parse("video/mp4"),clip)).build();
+            }).build();nativeTestSource=new androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(client);
+    }
+    int nativeTestLimitedCount(){return testLimitedRequests.get();}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}
     WebView testBrowser() { return browser; }

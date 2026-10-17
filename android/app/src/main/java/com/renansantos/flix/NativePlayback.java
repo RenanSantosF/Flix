@@ -48,6 +48,7 @@ final class NativePlayback {
     interface Listener {
         void progress(double position, double duration, boolean playing, boolean ended);
         void failed(String message);
+        void waiting(String message);
         void closed();
     }
     private final Activity activity;
@@ -58,11 +59,17 @@ final class NativePlayback {
     private ExoPlayer player;
     private LinearLayout panel, toolbar;
     private PlayerView playerView;
+    private TextView waitLabel;
+    private int session;
+    private boolean foreground=true;
+    private MediaRateLimit.Limited waitingLimit;
+    private final MediaRateLimit rateLimit;
     private final Runnable ticker = new Runnable() {
-        @Override public void run() { if (player != null) { report(false); handler.postDelayed(this,1000); } }
+        @Override public void run() { if (player != null) { report(false);updateWaitingLabel(); handler.postDelayed(this,1000); } }
     };
     NativePlayback(Activity activity, FrameLayout root, Runnable pip, Listener listener) {
         this.activity=activity; this.root=root; this.pip=pip; this.listener=listener;
+        rateLimit=new MediaRateLimit(new MediaCooldownStore(activity.getSharedPreferences("media-cooldowns",android.content.Context.MODE_PRIVATE)),System::currentTimeMillis);
     }
     private DataSource.Factory network(MediaRequestContext context, String userAgent) {
         OkHttpClient client = new OkHttpClient.Builder()
@@ -75,6 +82,7 @@ final class NativePlayback {
                 return addresses;
             })
             .addInterceptor(new MediaRedirectInterceptor())
+            .addInterceptor(rateLimit)
             .addNetworkInterceptor(chain -> {
                 // This also validates every redirect and every HLS/DASH segment/key request.
                 if (!MediaUrlPolicy.allowedNetwork(chain.request().url().toString())) throw new IOException("Invalid media redirect");
@@ -101,6 +109,7 @@ final class NativePlayback {
     }
     void open(String source, String sourceType, MediaRequestContext context, String userAgent, double resume, DataSource.Factory testSource) {
         close(false);
+        final int generation=session;
         // Media URLs can contain ephemeral signatures. Do not let engine errors log them.
         androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF);
         if(!MediaUrlPolicy.allowed(source))return;
@@ -112,31 +121,48 @@ final class NativePlayback {
         Button floating=new Button(activity);floating.setText("Janela flutuante");floating.setOnClickListener(v->pip.run());
         toolbar.addView(back,new LinearLayout.LayoutParams(-2,-1));toolbar.addView(title,new LinearLayout.LayoutParams(0,-1,1));toolbar.addView(floating,new LinearLayout.LayoutParams(-2,-1));
         panel.addView(toolbar,new LinearLayout.LayoutParams(-1,dp(52)));
+        waitLabel=new TextView(activity);waitLabel.setTextColor(Color.LTGRAY);waitLabel.setTextSize(17);waitLabel.setGravity(Gravity.CENTER);
+        waitLabel.setPadding(dp(20),dp(24),dp(20),dp(24));waitLabel.setVisibility(View.GONE);panel.addView(waitLabel,new LinearLayout.LayoutParams(-1,-2));
         playerView=new PlayerView(activity);playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
         panel.addView(playerView,new LinearLayout.LayoutParams(-1,0,1));root.addView(panel,new FrameLayout.LayoutParams(-1,-1));
         final MediaFormatProbe format=new MediaFormatProbe();
         DataSource.Factory requests=testSource!=null?testSource:network(context,userAgent);
         DefaultMediaSourceFactory sources=new DefaultMediaSourceFactory(observeFormat(requests,source,format));
-        sources.setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(0) {
-            @Override public long getRetryDelayMsFor(LoadErrorHandlingPolicy.LoadErrorInfo info) { return C.TIME_UNSET; }
+        final java.util.concurrent.atomic.AtomicBoolean waited=new java.util.concurrent.atomic.AtomicBoolean();
+        sources.setLoadErrorHandlingPolicy(new DefaultLoadErrorHandlingPolicy(1) {
+            @Override public long getRetryDelayMsFor(LoadErrorHandlingPolicy.LoadErrorInfo info) {
+                MediaRateLimit.Limited limited=MediaRateLimit.find(info.exception);
+                if(limited==null)return C.TIME_UNSET;
+                long delay=Math.max(0,limited.deadline.until-System.currentTimeMillis());
+                // One automatic attempt, after the real deadline. Longer waits stay
+                // persisted for a later manual attempt, rather than background work.
+                if(delay>300000||!waited.compareAndSet(false,true))return C.TIME_UNSET;
+                handler.post(()->{if(session==generation)showWaiting(limited);});return delay;
+            }
         });
         player=new ExoPlayer.Builder(activity).setMediaSourceFactory(sources)
             .setRenderersFactory(new DefaultRenderersFactory(activity).setEnableDecoderFallback(true)).build();
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true);
         playerView.setPlayer(player);
+        final ExoPlayer engine=player;
         final double start=resume;
         String type=sourceType.toLowerCase(Locale.ROOT),path=android.net.Uri.parse(source).getPath();
         final String mime=type.contains("mpegurl")||(path!=null&&path.toLowerCase(Locale.ROOT).endsWith(".m3u8"))?MimeTypes.APPLICATION_M3U8:
             type.contains("dash+xml")||(path!=null&&path.toLowerCase(Locale.ROOT).endsWith(".mpd"))?MimeTypes.APPLICATION_MPD:"";
         player.addListener(new Player.Listener() {
             private boolean positioned, formatRecovered;
-            @Override public void onIsPlayingChanged(boolean playing) { if(player!=null)report(false); }
+            @Override public void onIsPlayingChanged(boolean playing) { if(player==engine)report(false); }
             @Override public void onPlaybackStateChanged(int state) {
-                if(player==null)return;
+                if(player!=engine)return;
+                if(state==Player.STATE_READY&&waitingLimit!=null){clearWaiting();}
                 if(state==Player.STATE_READY&&!positioned){positioned=true;if(start>0&&!player.isCurrentMediaItemLive()&&player.getDuration()>0)player.seekTo(Math.min((long)(start*1000),Math.max(0,player.getDuration()-1000)));}
                 if(state==Player.STATE_ENDED)report(true);
             }
+            @Override public void onIsLoadingChanged(boolean loading) {
+                if(player==engine&&!loading&&waitingLimit!=null&&System.currentTimeMillis()>=waitingLimit.deadline.until)clearWaiting();
+            }
             @Override public void onPlayerError(PlaybackException error) {
+                if(player!=engine)return;
                 String detected=format.manifestMime();
                 boolean parsing=error.errorCode==PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED||error.errorCode==PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED;
                 // Media3 cannot infer HLS/DASH from a URL such as /stream?id=... .
@@ -175,7 +201,21 @@ final class NativePlayback {
             @Override public void close() throws IOException {delegate.close();}
         };
     }
+    private void showWaiting(MediaRateLimit.Limited limited) {
+        if(player==null||panel==null)return;
+        if(!foreground){String message=MediaRateLimit.message(limited,System.currentTimeMillis());close(false);listener.failed(message);return;}
+        waitingLimit=limited;playerView.setUseController(false);waitLabel.setVisibility(View.VISIBLE);
+        updateWaitingLabel();listener.waiting(MediaRateLimit.message(limited,System.currentTimeMillis()));
+    }
+    private void updateWaitingLabel() {
+        if(waitLabel==null||waitingLimit==null)return;
+        long seconds=MediaRateLimit.seconds(waitingLimit.deadline,System.currentTimeMillis());
+        waitLabel.setText("Limite temporário do provedor\n"+(seconds>0?"Nova tentativa em "+seconds+" s":"Tentando novamente…"));
+    }
+    private void clearWaiting() {waitingLimit=null;if(waitLabel!=null)waitLabel.setVisibility(View.GONE);if(playerView!=null)playerView.setUseController(true);}
     private static String failureMessage(PlaybackException error) {
+        MediaRateLimit.Limited limited=MediaRateLimit.find(error);
+        if(limited!=null)return MediaRateLimit.message(limited,System.currentTimeMillis());
         Throwable cause=error;
         for(int i=0;i<12&&cause!=null;i++,cause=cause.getCause())if(cause instanceof HttpDataSource.InvalidResponseCodeException)
             return ((HttpDataSource.InvalidResponseCodeException)cause).responseCode>=300&&((HttpDataSource.InvalidResponseCodeException)cause).responseCode<400
@@ -190,13 +230,20 @@ final class NativePlayback {
     }
     void report(boolean ended) { if(player!=null){long duration=player.getDuration();listener.progress(Math.max(0,player.getCurrentPosition()/1000d),duration>0?duration/1000d:0,player.isPlaying(),ended);} }
     void close(boolean reportPosition) {
+        session++;
         if(player==null&&panel==null)return;
         handler.removeCallbacks(ticker);
         if(player!=null){if(reportPosition)report(false);ExoPlayer old=player;player=null;playerView.setPlayer(null);old.release();}
-        if(panel!=null){root.removeView(panel);panel=null;}toolbar=null;playerView=null;listener.closed();
+        if(panel!=null){root.removeView(panel);panel=null;}toolbar=null;playerView=null;waitLabel=null;waitingLimit=null;listener.closed();
     }
-    void pause() { if(player!=null)player.pause(); }
+    void visible(){foreground=true;}
+    void pause() {
+        foreground=false;
+        if(waitingLimit!=null) {String message=MediaRateLimit.message(waitingLimit,System.currentTimeMillis());close(false);listener.failed(message);}
+        else if(player!=null)player.pause();
+    }
     void pip(boolean active) { if(toolbar!=null)toolbar.setVisibility(active?View.GONE:View.VISIBLE);if(playerView!=null)playerView.setUseController(!active); }
+    boolean isWaiting(){return waitingLimit!=null;}
     boolean isOpen() { return player!=null; }
     long positionMs() { return player==null?0:player.getCurrentPosition(); }
     private int dp(int size) { return Math.round(size*activity.getResources().getDisplayMetrics().density); }
