@@ -420,7 +420,7 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() {super.onStart();if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
         super.onStop();
-        if (!enteringPip && !isInPictureInPictureMode()) {pendingRecovery=null;pendingToken="";if(nativePlayback!=null)nativePlayback.pause();}
+        if (!enteringPip && !isInPictureInPictureMode()) {if(pendingRecovery!=null)nativeSession(false);pendingRecovery=null;pendingToken="";if(nativePlayback!=null)nativePlayback.pause();}
         if (!enteringPip && !isInPictureInPictureMode() && activeReply != null) {
             try { activeReply.postMessage(new JSONObject().put("type", "pause").put("videoId", activeVideo).toString()); } catch (Exception ignored) { }
         }

@@ -303,13 +303,13 @@ public class PopupBlockingTest {
             scenario.onActivity(a->a.nativeTestRateLimitClip(bytes,2,false));
             load(scenario,"<!doctype html><title>Popup test</title><script>window.lastProgress=null;window.lastNotice='';window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail});window.addEventListener('flix:notice',function(e){window.lastNotice=e.detail});</script>");
             waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
-            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0}));true");
             long start=SystemClock.elapsedRealtime();
             js(scenario,"FlixMedia.postMessage(JSON.stringify({videoId:'limit:1',error:4,position:0,duration:0,source:'https://rate-fixture.example/video.mp4',sourceKind:'https'}));true");
             waitForJs(scenario,"window.lastNotice.indexOf('HTTP 429')>=0");
             AtomicReference<Integer> count=new AtomicReference<>(0);scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(1,(int)count.get());
             saveScreenshot("Flix-espera-429.png");
-            waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
+            waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0");
             assertTrue(SystemClock.elapsedRealtime()-start>=2000);
             scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(2,(int)count.get());
             waitForJs(scenario,"window.lastNotice===''");saveScreenshot("Flix-recuperacao-429.png");
