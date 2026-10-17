@@ -41,6 +41,7 @@ import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONObject;
 
+@androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public final class MainActivity extends Activity {
     static final String EXTRA_SELF_TEST = "flix.self_test";
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -59,8 +60,11 @@ public final class MainActivity extends Activity {
     private double resumePosition;
     private boolean playbackActive, documentStartObserver, destroyed, enteringPip;
     private JavaScriptReplyProxy activeReply;
+    private NativePlayback nativePlayback;
+    private androidx.media3.datasource.DataSource.Factory nativeTestSource;
+    private final HashSet<String> recoveredSources = new HashSet<>();
     private String observerScript = "";
-    private String testHtml;
+    private String testHtml, testBootstrap;
     private int mediaMessages;
     private String lastMediaOrigin = "";
     private boolean selfTest() { return BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false); }
@@ -87,6 +91,19 @@ public final class MainActivity extends Activity {
         createErrorPanel();
         configureBrowser();
         configureMediaBridge();
+        nativePlayback = new NativePlayback(this, root, this::enterPlayerPip, new NativePlayback.Listener() {
+            @Override public void progress(double position,double duration,boolean playing,boolean ended) {
+                if(contextKey.isEmpty()||destroyed)return;
+                playbackActive=playing;root.setKeepScreenOn(playing);updatePipParams();
+                try {
+                    JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode)
+                        .put("position",position).put("duration",duration).put("playing",playing).put("ended",ended);
+                    browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:"+event+"}))",null);
+                } catch(Exception ignored) { }
+            }
+            @Override public void failed(String message) { notice(message); }
+            @Override public void closed() { playbackActive=false;root.setKeepScreenOn(false);updatePipParams(); }
+        });
         browser.setWebChromeClient(new WebChromeClient() {
             @Override public void onProgressChanged(WebView view, int value) {
                 progress.setProgress(value); progress.setVisibility(value == 100 || isInPictureInPictureMode() ? View.GONE : View.VISIBLE);
@@ -132,7 +149,9 @@ public final class MainActivity extends Activity {
                 // Instrumentation uses a real HTTPS document origin, without weakening media checks.
                 if (selfTest() && testHtml != null && request.isForMainFrame() && (NavigationPolicy.HOME + "android-test").equals(url))
                     return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(testHtml.getBytes(StandardCharsets.UTF_8)));
-                if (NavigationPolicy.isAdUrl(url) || (request.isForMainFrame() && !NavigationPolicy.isAppUrl(url))) { noteBlockedNavigation(); return emptyResponse(); }
+                if (NavigationPolicy.blockNetworkRequest(url,request.isForMainFrame())) { noteBlockedNavigation(); return emptyResponse(); }
+                if(selfTest()&&testBootstrap!=null&&"https://asiafilm.org/flix-player-test.js".equals(url))
+                    return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream(testBootstrap.getBytes(StandardCharsets.UTF_8)));
                 return null;
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
@@ -206,18 +225,33 @@ public final class MainActivity extends Activity {
                 }
             } catch (Exception ignored) { }
         });
-        // Untrusted frames may report bounded media numbers only. They cannot invoke native actions.
+        // Frames report bounded media state and, on error 4 only, their assigned media URL.
+        // Only the local decoder can use that URL; no URL or cookie is forwarded to the website.
         WebViewCompat.addWebMessageListener(browser, "FlixMedia", Collections.singleton("*"), (view, message, sourceOrigin, mainFrame, reply) -> {
             if (BuildConfig.DEBUG) { mediaMessages++; lastMediaOrigin = sourceOrigin.toString(); }
             if (contextKey.isEmpty() || destroyed || NavigationPolicy.isAdUrl(sourceOrigin.toString())) return;
             if (!NavigationPolicy.isAppUrl(browser.getUrl() == null ? "" : browser.getUrl())) return;
             if (!"https".equals(sourceOrigin.getScheme())) return;
             try {
-                String raw = message.getData(); if (raw == null || raw.length() > 1024) return;
+                String raw = message.getData(); if (raw == null || raw.length() > 8192) return;
                 JSONObject data = new JSONObject(raw); String video = data.optString("videoId");
                 double duration = data.optDouble("duration", 0), position = data.optDouble("position", 0);
                 if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || position < 0 || position > 1e12) return;
+                if(nativePlayback!=null&&nativePlayback.isOpen())return;
                 int error = data.optInt("error", 0);
+                if(error==4&&(activeVideo.isEmpty()||activeVideo.equals(video))) {
+                    String source=data.optString("source"),sourceType=data.optString("sourceType");
+                    if(MediaUrlPolicy.allowed(source)&&sourceType.length()<=100&&recoveredSources.size()<2&&recoveredSources.add(source)) {
+                        activeVideo=video;activeReply=reply;
+                        try { reply.postMessage(new JSONObject().put("type","pause").put("videoId",video).toString()); } catch(Exception ignored) { }
+                        exitFullscreen();
+                        try {
+                            nativePlayback.open(source,sourceType,sourceOrigin.toString(),browser.getSettings().getUserAgentString(),
+                                contextKey.startsWith("live:")?0:(position>0?Math.min(position,604800):resumePosition),selfTest()?nativeTestSource:null);
+                        } catch(RuntimeException failure) {nativePlayback.close(false);notice("Não foi possível preparar este vídeo. Tente o principal ou o legendado.");}
+                        return;
+                    }
+                }
                 if (error >= 1 && error <= 4 && (activeVideo.isEmpty() || activeVideo.equals(video))) {
                     playbackActive = false; root.setKeepScreenOn(false); updatePipParams();
                     JSONObject failure = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode).put("error", error);
@@ -247,15 +281,17 @@ public final class MainActivity extends Activity {
     }
 
     private void clearPlaybackContext() {
+        if(nativePlayback!=null)nativePlayback.close(false);
+        recoveredSources.clear();
         contextKey = ""; activeVideo = ""; activeReply = null; resumePosition = 0; playbackActive = false;
         restoredVideos.clear(); root.setKeepScreenOn(false); updatePipParams();
     }
     private boolean canPip() { return getPackageManager().hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE); }
     private PictureInPictureParams pipParams() {
         PictureInPictureParams.Builder builder = new PictureInPictureParams.Builder().setAspectRatio(new Rational(16, 9));
-        Rect rect = new Rect(); View target = customView == null ? browser : customView;
+        Rect rect = new Rect(); View target = nativePlayback!=null&&nativePlayback.isOpen()?root:customView == null ? browser : customView;
         if (target != null && target.getGlobalVisibleRect(rect)) builder.setSourceRectHint(rect);
-        if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(playbackActive && customView != null).setSeamlessResizeEnabled(true);
+        if (Build.VERSION.SDK_INT >= 31) builder.setAutoEnterEnabled(playbackActive && (customView != null || (nativePlayback!=null&&nativePlayback.isOpen()))).setSeamlessResizeEnabled(true);
         return builder.build();
     }
     private void updatePipParams() { if (!destroyed && browser != null && canPip()) { try { setPictureInPictureParams(pipParams()); } catch (IllegalStateException ignored) { } } }
@@ -265,7 +301,8 @@ public final class MainActivity extends Activity {
         if (!playbackActive) { notice("Inicie o vídeo antes de abrir a janela flutuante."); return; }
         if (isInPictureInPictureMode()) return;
         enteringPip = true;
-        if (customView != null) enterPipNow();
+        if (nativePlayback!=null&&nativePlayback.isOpen()) {nativePlayback.pip(true);enterPipNow();}
+        else if (customView != null) enterPipNow();
         else browser.evaluateJavascript("document.body.classList.add('flix-pip');true", result -> enterPipNow());
     }
     private void enterPipNow() {
@@ -273,20 +310,21 @@ public final class MainActivity extends Activity {
         try { if (!enterPictureInPictureMode(pipParams())) { enteringPip = false; restoreInlineLayout(); notice("Permita a janela flutuante nas configurações do Android para continuar."); } }
         catch (IllegalStateException | IllegalArgumentException e) { enteringPip = false; restoreInlineLayout(); notice("Permita a janela flutuante nas configurações do Android para continuar."); }
     }
-    private void restoreInlineLayout() { if (!destroyed) browser.evaluateJavascript("document.body.classList.remove('flix-pip')", null); }
+    private void restoreInlineLayout() { if(nativePlayback!=null)nativePlayback.pip(false); if (!destroyed) browser.evaluateJavascript("document.body.classList.remove('flix-pip')", null); }
     @Override protected void onUserLeaveHint() {
         super.onUserLeaveHint();
-        if (playbackActive && !(Build.VERSION.SDK_INT >= 31 && customView != null)) enterPlayerPip();
+        if (playbackActive && !(Build.VERSION.SDK_INT >= 31 && (customView != null || (nativePlayback!=null&&nativePlayback.isOpen())))) enterPlayerPip();
     }
     @Override public void onPictureInPictureModeChanged(boolean inPip, Configuration config) {
         super.onPictureInPictureModeChanged(inPip, config);
         enteringPip = false;
         progress.setVisibility(View.GONE);
-        if (inPip) root.setPadding(0, 0, 0, 0);
+        if (inPip) { root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
         else { restoreInlineLayout(); root.requestApplyInsets(); }
     }
     @Override protected void onStop() {
         super.onStop();
+        if (!enteringPip && !isInPictureInPictureMode() && nativePlayback!=null)nativePlayback.pause();
         if (!enteringPip && !isInPictureInPictureMode() && activeReply != null) {
             try { activeReply.postMessage(new JSONObject().put("type", "pause").put("videoId", activeVideo).toString()); } catch (Exception ignored) { }
         }
@@ -300,13 +338,18 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE); root.requestApplyInsets(); updatePipParams();
         if (customViewCallback != null) { customViewCallback.onCustomViewHidden(); customViewCallback = null; }
     }
-    @Override public void onBackPressed() { if (customView != null) exitFullscreen(); else if (browser.canGoBack()) browser.goBack(); else super.onBackPressed(); }
+    @Override public void onBackPressed() { if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.close(true); else if (customView != null) exitFullscreen(); else if (browser.canGoBack()) browser.goBack(); else super.onBackPressed(); }
     @Override protected void onSaveInstanceState(Bundle outState) { browser.saveState(outState); super.onSaveInstanceState(outState); }
     @Override protected void onDestroy() {
         destroyed = true; handler.removeCallbacksAndMessages(null);
         for (WebView sink : popupSinks) sink.destroy(); popupSinks.clear();
+        if(nativePlayback!=null)nativePlayback.close(false);
         browser.stopLoading(); browser.destroy(); super.onDestroy();
     }
+    void playerTestBootstrap(String script) {if(!selfTest())throw new IllegalStateException("Debug fixture only");testBootstrap=script;}
+    void nativeTestClip(byte[] bytes) { if(!selfTest())throw new IllegalStateException("Debug fixture only");nativeTestSource=()->new androidx.media3.datasource.ByteArrayDataSource(bytes); }
+    boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
+    long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}
     WebView testBrowser() { return browser; }
     void loadTestHtml(String html) { if (!selfTest()) throw new IllegalStateException("Test fixture is debug-only"); testHtml = html; browser.loadUrl(NavigationPolicy.HOME + "android-test"); }
     int popupCount() { return blockedPopups.get(); }

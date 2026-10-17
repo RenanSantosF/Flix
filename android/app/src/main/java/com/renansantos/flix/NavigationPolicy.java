@@ -34,12 +34,18 @@ final class NavigationPolicy {
         return false;
     }
 
+    static boolean blockNetworkRequest(String value, boolean mainFrame) {
+        // Popup windows have their own offline WebView. A host-wide network deny
+        // also blocked scripts/redirect chains needed by legitimate video sources.
+        return mainFrame && !isAppUrl(value);
+    }
+
     static boolean canLoadSubframe(String value) {
         try {
             URI uri = URI.create(value);
             String scheme = uri.getScheme();
-            return !isAdUrl(value) && ("https".equalsIgnoreCase(scheme)
-                || "about:blank".equals(value) || "blob".equalsIgnoreCase(scheme) || "data".equalsIgnoreCase(scheme));
+            return "https".equalsIgnoreCase(scheme)
+                || "about:blank".equals(value) || "blob".equalsIgnoreCase(scheme) || "data".equalsIgnoreCase(scheme);
         } catch (RuntimeException e) { return false; }
     }
 }
