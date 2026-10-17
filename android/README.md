@@ -1,5 +1,25 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.8: HTTP 429 é tratado como limite de requisições, com o domínio que
+realmente respondeu após os redirects. Lê Retry-After em segundos ou HTTP-date
+(com Date para compensar diferença de relógio). Se ausente/inválido, usa espera
+inicial de 60 s, sem afirmar que o servidor será liberado nesse prazo.
+
+O prazo por host é persistido em SharedPreferences (somente domínio e deadline).
+Uma tentativa anterior ao prazo é interrompida localmente antes da conexão,
+inclusive após recarregar o contexto ou reiniciar. Não são armazenados corpo
+ou resposta HTTP 429, cookies, URLs assinadas ou tokens no controle de espera.
+
+Há no máximo uma repetição automática por sessão de recuperação, após o prazo,
+para esperas de até cinco minutos. Prazos maiores ou um segundo 429 são exibidos
+para nova tentativa manual posterior. A tela exibe contagem regressiva e permite
+voltar aos servidores; sair do app cancela a espera automática. 401/403 e outras
+falhas não entram nesse retry. A disponibilidade continua a cargo do provedor.
+
+Testes verificam Retry-After numérico/datas/relógios, recusa local durante a espera,
+host final de um redirect, persistência, cancelamento de contexto e vídeo real
+reproduzido depois de 429→espera→200, sem pedidos antecipados.
+
 Versão 0.7: HTTP 301/302/303/307/308 é tratado como redirecionamento, seguindo
 somente o Location retornado, até dez saltos. Corrige a recusa de HTTPS→HTTP
 que fazia o Media3 receber HTTP 302 sem alcançar o arquivo. Endereços privados,

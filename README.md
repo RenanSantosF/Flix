@@ -26,6 +26,9 @@ Falhas nativas deixam de ser apagadas por eventos repetidos do navegador.
 A versão 0.7 segue os Locations HTTP 301/302/303/307/308, inclusive HTTPS→HTTP,
 com limite e validação por salto. O transporte HTTP fica no motor de mídia;
 a navegação e a proteção de pop-ups do WebView continuam como antes.
+A versão 0.8 respeita o prazo de Retry-After em respostas 429, mostra a espera
+e faz no máximo uma nova tentativa automática. O prazo por domínio persiste
+entre recargas; a liberação efetiva depende do provedor.
 O aviso inclui diagnóstico copiável com versão do APK/WebView, domínio do frame,
 tipo de fonte e motivo fixo; nenhum caminho, query, cookie ou token é exibido.
 O navegador comum usa o iframe oficial e as próprias regras de pop-up do navegador.
