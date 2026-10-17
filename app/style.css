@@ -20,3 +20,5 @@
 
 /* Put the games above the fold on small phones. */
 @media(max-width:700px){.live-page{padding-top:20px}.live-page .page-heading{margin-bottom:12px}.live-page .page-heading h1{font-size:26px;margin:9px 0 0}.live-page .page-heading p{display:none}.live-tabs{margin-bottom:16px}.live-page .search-field,.live-page .filter-chips{margin-bottom:14px}.live-page .section-heading{margin:20px 0 14px}.live-card{min-height:170px;padding:14px}.live-card img{height:32px;margin-bottom:12px}.live-card .live-label{margin-bottom:10px}.live-card h3{font-size:14px}.live-card p{font-size:10px;margin-bottom:10px}.live-card time{font-size:10px}}
+
+.player-diagnostic{margin:12px 0;color:var(--muted);font-size:11px;line-height:1.6;border:1px solid var(--line);border-radius:10px;padding:12px 14px}.player-diagnostic summary{cursor:pointer;color:#d4d4df}.player-diagnostic p{margin:10px 0;overflow-wrap:anywhere}.player-diagnostic button{background:#ffffff12;border:1px solid #ffffff22;border-radius:7px;padding:8px 12px;font-size:11px}

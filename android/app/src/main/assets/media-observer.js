@@ -5,8 +5,52 @@
     try {
       if (win.__flixMediaObserver || !win.FlixMedia) return;
       win.__flixMediaObserver = true;
-      var ids = new WeakMap(), sourceFailures = new WeakMap(), videos = {}, next = 0, lastTime = 0;
+      var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
+      var manifests = [], observer, epochs = new WeakMap();
       var prefix = Math.random().toString(36).slice(2) + ':';
+      // Resource Timing describes requests already made by this frame. Do not fetch,
+      // guess URLs or inspect provider internals. Only an unambiguous, recent manifest
+      // in a single-video frame can recover a MediaSource blob.
+      function remember(entries) {
+        entries.forEach(function (entry) {
+          try {
+            var url = new win.URL(entry.name);
+            if (url.protocol !== 'https:' || entry.name.length > 4096 ||
+                !/\.(m3u8|mpd)$/i.test(url.pathname) ||
+                !/^(fetch|xmlhttprequest)$/.test(entry.initiatorType)) return;
+            manifests.push({url:entry.name, time:entry.startTime});
+          } catch (_) {}
+        });
+        manifests = manifests.filter(function (entry) { return win.performance.now() - entry.time <= 30000; }).slice(-32);
+      }
+      try {
+        remember(win.performance.getEntriesByType('resource'));
+        if (win.PerformanceObserver) {
+          observer = new win.PerformanceObserver(function (list) { remember(list.getEntries()); });
+          observer.observe({entryTypes:['resource']});
+        }
+      } catch (_) {}
+      function mediaSource(video) {
+        var child = video.querySelector('source[src]');
+        var raw = video.currentSrc || video.src || (child ? child.src : '');
+        if (!/^https:\/\//i.test(raw) && child && /^https:\/\//i.test(child.src)) raw = child.src;
+        var kind = /^https:\/\//i.test(raw) ? 'https' : /^blob:/i.test(raw) ? 'blob' : /^http:/i.test(raw) ? 'http' : raw ? 'other' : 'missing';
+        var result = {source:'', sourceType:'', sourceKind:kind, sourceReason:'no-https-source'};
+        if (/^https:\/\//i.test(raw)) {
+          result.source = raw; result.sourceType = child ? child.type || '' : ''; result.sourceReason = 'direct';
+        } else if (kind === 'blob') {
+          // Multiple videos or manifests cannot be reliably attributed to this video.
+          var unique = [], now = win.performance.now();
+          manifests.forEach(function (entry) { if (now - entry.time <= 30000 && entry.time >= (epochs.get(video) || 0) && unique.indexOf(entry.url) < 0) unique.push(entry.url); });
+          if (win.document.querySelectorAll('video').length !== 1 || unique.length > 1) result.sourceReason = 'ambiguous-manifest';
+          else if (unique.length === 1) {
+            result.source = unique[0]; result.sourceType = /\.mpd(?:[?#]|$)/i.test(unique[0]) ? 'application/dash+xml' : 'application/vnd.apple.mpegurl';
+            result.sourceReason = 'observed-manifest';
+          } else result.sourceReason = 'blob-without-manifest';
+        }
+        if (result.source.length > 4096) { result.source = ''; result.sourceReason = 'source-too-long'; }
+        return result;
+      }
       function send(video, event, sourceError) {
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
@@ -16,17 +60,11 @@
         var now = Date.now();
         if (event === 'timeupdate' && now - lastTime < 1000) return;
         lastTime = now;
-        var source = '', sourceType = '';
-        // On incompatibility only, pass the URL already assigned to this video to the
-        // local Android decoder. Never send URLs to the website, logs or a server.
-        if (error === 4) {
-          var child = video.querySelector('source[src]');
-          source = video.currentSrc || video.src || (child ? child.src : '');
-          sourceType = child ? (child.type || '') : '';
-          if (!/^https:\/\//i.test(source) && child) source = child.src;
-          if (!/^https:\/\//i.test(source) || source.length > 4096) source = '';
-        }
-        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, source:source, sourceType:sourceType.slice(0,100),
+        var source = {source:'', sourceType:'', sourceKind:'', sourceReason:''};
+        if (error === 4) source = mediaSource(video);
+        if (error) failedVideos.set(video, {until:event === 'recovery-scan' ? (failedVideos.get(video) || {until:now}).until : now + 5000, signature:source.source + ':' + source.sourceReason, error:error});
+        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, source:source.source, sourceType:source.sourceType.slice(0,100),
+          sourceKind:source.sourceKind, sourceReason:source.sourceReason,
           position:video.currentTime || 0, duration:live || !isFinite(duration) ? 0 : duration, live:live, error:error,
           playing:!video.paused && !video.ended, ended:video.ended}));
       }
@@ -39,9 +77,13 @@
           } else if (data.type === 'pause') { video.pause(); send(video, 'pause'); }
         } catch (_) {}
       };
-      ['error','loadedmetadata','durationchange','play','playing','pause','ended','seeked','timeupdate'].forEach(function (event) {
+      ['loadstart','emptied','error','loadedmetadata','durationchange','play','playing','pause','ended','seeked','timeupdate'].forEach(function (event) {
         win.document.addEventListener(event, function (e) {
           var source = e.target;
+          if (event === 'emptied' || event === 'loadstart') {
+            if (source instanceof win.HTMLVideoElement) { failedVideos.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
+            return;
+          }
           // A source rejected by MIME emits its own error; video.error can stay null.
           // Wait for all candidates to fail before recovering this video.
           if (event === 'error' && source instanceof win.HTMLSourceElement && source.parentElement instanceof win.HTMLVideoElement) {
@@ -55,7 +97,13 @@
         }, true);
       });
       function scan() {
-        win.document.querySelectorAll('video').forEach(function (video) { if (!video.paused || !ids.has(video)) send(video, 'scan'); });
+        win.document.querySelectorAll('video').forEach(function (video) {
+          var failure = failedVideos.get(video);
+          if (failure && Date.now() < failure.until) {
+            var source = mediaSource(video);
+            if (source.source + ':' + source.sourceReason !== failure.signature) send(video, 'recovery-scan', failure.error);
+          } else if (!video.paused || !ids.has(video)) send(video, 'scan');
+        });
         // Older WebViews lack document-start scripts. Same-origin frames still work.
         win.document.querySelectorAll('iframe').forEach(function (frame) { try { install(frame.contentWindow); } catch (_) {} });
       }

@@ -15,7 +15,13 @@ HTTPS rejeitada pelo HTML com erro 4 pode ser tentada automaticamente pelo
 motor Media3 local, sem trocar o provedor nem mostrar opções experimentais.
 O APK bloqueia a abertura de janelas e navegação externa, preservando as
 requisições internas que o provedor usa para preparar a mídia.
-Recusas HTTP e fontes inválidas continuam sendo apresentadas como falhas.
+A versão 0.5 também aceita um manifesto HLS/DASH já solicitado pelo próprio
+frame quando o vídeo falha com uma fonte `blob:`. A recuperação exige um único
+vídeo e um único manifesto recente e tenta novamente por até cinco segundos
+se a fonte chegar depois do erro. Não consulta endpoints extras nem adivinha links.
+Fontes ambíguas e recusas HTTP continuam sendo apresentadas como falhas.
+O aviso inclui diagnóstico copiável com versão do APK/WebView, domínio do frame,
+tipo de fonte e motivo fixo; nenhum caminho, query, cookie ou token é exibido.
 O navegador comum usa o iframe oficial e as próprias regras de pop-up do navegador.
 
 ## Canais e esportes

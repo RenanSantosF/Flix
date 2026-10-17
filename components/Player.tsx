@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import Icon from './Icons';
+import PlayerDiagnostic from './PlayerDiagnostic';
 import {useLibrary} from './Library';
 import {startWatching,recordProgress,readLibrary} from '../lib/watch-library';
 import {imageUrl,titleKey} from '../lib/catalog';
@@ -63,6 +64,7 @@ return <section className="playerSection" id="assistir"><div className="player-h
 <div className={'videoFrame'+(started&&!mediaReady?' server-selection':'')} id="player-frame">{!started?<div className="player-cover">{title.backdrop_path&&<img src={imageUrl(title.backdrop_path,'w780')} alt=""/>}<button type="button" aria-label={'Assistir '+title.title} onClick={()=>setStarted(true)}><Icon name="play" size={23}/></button><p>{type==='tv'?'Temporada '+season+' · Episódio '+episode:title.title}</p></div>:<iframe key={src+":"+reload} src={src} title="Reprodutor SuperFlixAPI" allow="autoplay *; encrypted-media *; picture-in-picture *; fullscreen *; clipboard-write *; accelerometer *; gyroscope *; web-share *" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"/>}</div>
 {started&&<div className="player-controls">{type==='tv'&&<><button className="button button-glass" disabled={episode<=1} onClick={()=>{setEpisode(e=>Math.max(1,e-1));setEnded(false)}}><Icon name="back" size={16}/>Anterior</button><button className={'button '+(ended&&hasNext?'button-accent':'button-glass')} disabled={!hasNext} onClick={nextEpisode}><Icon name="next" size={16}/>Próximo</button></>}{nativeApp&&<button className="button button-glass pip-button" onClick={floatPlayer}><Icon name="pip" size={17}/>Janela flutuante</button>}<button className="icon-button" aria-label="Recarregar vídeo" title="Recarregar vídeo" onClick={()=>setReload(n=>n+1)}><Icon name="refresh" size={17}/></button></div>}
 {notice&&<p className="player-notice" role="status">{notice}</p>}
+{nativeApp&&started&&<PlayerDiagnostic resetKey={src+reload}/>}
 {nativeApp&&started&&<p className="player-status"><i/>Reprodução protegida · use a janela flutuante para assistir em outros apps</p>}
 {type==='tv'&&<><div className="selectors"><label>Temporada<select value={season} onChange={e=>{setSeason(Number(e.target.value));setEpisode(1);setEnded(false)}}>{(available.length?available:[{season_number:1,episode_count:1,name:'Temporada 1'}]).map(s=><option key={s.season_number} value={s.season_number}>{s.name||'Temporada '+s.season_number}</option>)}</select></label><label>Episódio<select value={episode} onChange={e=>{setEpisode(Number(e.target.value));setEnded(false)}}>{Array.from({length:episodeCount},(_,i)=><option key={i+1} value={i+1}>Episódio {i+1}</option>)}</select></label></div></>}</section>;
 }
