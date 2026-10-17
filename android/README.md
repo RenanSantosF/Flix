@@ -1,4 +1,28 @@
-# Flix Android · Ao vivo
+# Flix Android · Recuperação de vídeo
+
+Versão 0.4: quando um HTMLVideoElement retorna MEDIA_ERR_SRC_NOT_SUPPORTED (4),
+o app pode tentar o mesmo recurso de mídia com Media3/ExoPlayer, preservando
+posição, histórico, pausa e PiP. A interface normal do site e os servidores que
+já funcionam continuam com o WebView. Não há um seletor extra de reprodução.
+
+Somente o src/currentSrc ou source[src] já atribuído ao vídeo com erro é usado.
+Não são descobertos endpoints, extraídos manifestos de páginas protegidas nem
+contornadas verificações. URLs blob sem uma source HTTPS não são recuperadas.
+O link passa somente da página para o decodificador local; nunca vai ao site,
+logs, analytics ou a um servidor de extração.
+
+As requisições nativas mantêm TLS, rejeitam protocolos inseguros e destinos
+locais/privados, inclusive em DNS, segmentos e redirecionamentos. Cookies são
+selecionados novamente por domínio a cada requisição; não existe um cabeçalho
+Cookie global. O Referer contém somente a origem do frame, sem query assinada.
+Uma recusa HTTP não é contornada nem repetida automaticamente. Há no máximo
+duas fontes diferentes tentadas por sessão, sem repetição da mesma fonte.
+
+Validação: fixture local de vídeo real H.264, rejeitada pelo HTML por um MIME
+incompatível, é reproduzida pelo motor nativo com retomada e PiP. Isso verifica
+a recuperação de formato, não comprova que o servidor alternativo real esteja
+disponível: ele pode responder com um erro HTTP ou uma fonte inválida.
+Media3 1.6.1 mantém compatibilidade com o compileSdk 35 e AGP existentes.
 
 Versão 0.3: canais e agenda, player simplificado, área de servidores maior e
 suporte a duração infinita de transmissões ao vivo no observador/PiP.
@@ -14,8 +38,8 @@ Versão 0.2: navegação integrada ao site, sem barra nativa duplicada. O site
 mantém favoritos e histórico no armazenamento local do WebView.
 
 O observador de mídia usa AndroidX WebKit para receber somente posição,
-duração e estado do vídeo, inclusive em frames de outros provedores. Não
-extrai URLs de vídeo, cookies nem HTML. A API de comandos é restrita ao
+duração e estado do vídeo, inclusive em frames de outros provedores. URLs de vídeo só passam ao
+decodificador local no caso de erro 4; cookies e HTML não são expostos ao site. A API de comandos é restrita ao
 documento principal do domínio Flix; frames externos só podem informar
 números de reprodução. WebViews antigos sem scripts no início do documento
 têm suporte limitado aos frames da mesma origem.

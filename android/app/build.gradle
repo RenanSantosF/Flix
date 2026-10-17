@@ -6,8 +6,8 @@ android {
         applicationId 'com.renansantos.flix'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.3-ao-vivo'
+        versionCode 4
+        versionName '0.4-player'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true }
@@ -16,6 +16,12 @@ android {
 }
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
+    def media3 = '1.6.1' // Compatible with the existing compileSdk 35 / AGP toolchain.
+    implementation "androidx.media3:media3-exoplayer:$media3"
+    implementation "androidx.media3:media3-exoplayer-hls:$media3"
+    implementation "androidx.media3:media3-exoplayer-dash:$media3"
+    implementation "androidx.media3:media3-datasource-okhttp:$media3"
+    implementation "androidx.media3:media3-ui:$media3"
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:core:1.6.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'

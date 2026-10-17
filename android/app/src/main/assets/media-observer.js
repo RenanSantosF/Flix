@@ -1,5 +1,6 @@
 (function () {
-  // Only media state is reported. No source URLs, cookies or page contents leave a frame.
+  // Reports media state. On error 4 only, the already assigned source goes to the
+  // local Android decoder; no URLs, cookies or page HTML are sent to the website.
   function install(win) {
     try {
       if (win.__flixMediaObserver || !win.FlixMedia) return;
@@ -15,7 +16,17 @@
         var now = Date.now();
         if (event === 'timeupdate' && now - lastTime < 1000) return;
         lastTime = now;
-        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event,
+        var source = '', sourceType = '';
+        // On incompatibility only, pass the URL already assigned to this video to the
+        // local Android decoder. Never send URLs to the website, logs or a server.
+        if (error === 4) {
+          var child = video.querySelector('source[src]');
+          source = video.currentSrc || video.src || (child ? child.src : '');
+          sourceType = child ? (child.type || '') : '';
+          if (!/^https:\/\//i.test(source) && child) source = child.src;
+          if (!/^https:\/\//i.test(source) || source.length > 4096) source = '';
+        }
+        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, source:source, sourceType:sourceType.slice(0,100),
           position:video.currentTime || 0, duration:live || !isFinite(duration) ? 0 : duration, live:live, error:error,
           playing:!video.paused && !video.ended, ended:video.ended}));
       }
