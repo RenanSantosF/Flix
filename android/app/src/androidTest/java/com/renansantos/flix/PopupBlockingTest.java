@@ -148,4 +148,31 @@ public class PopupBlockingTest {
             waitForJs(scenario, "!document.querySelector('video').paused && document.body.classList.contains('flix-pip')");
         }
     }
+
+    @Test public void liveCatalogShowsThreeCompactPostersAndPersistsFavorites() throws Exception {
+        org.junit.Assume.assumeTrue("Live UI runs after the production merge", "true".equals(InstrumentationRegistry.getArguments().getString("liveCatalog")));
+        try (ActivityScenario<MainActivity> scenario = launch()) {
+            scenario.onActivity(a->a.testBrowser().loadUrl(NavigationPolicy.HOME));
+            waitForJs(scenario, "document.querySelectorAll('.poster-card').length>=3");
+            assertEquals("true",js(scenario,"document.querySelector('.poster-card').getBoundingClientRect().width<=innerWidth/2.5 && document.documentElement.scrollWidth<=innerWidth+1"));
+            waitForJs(scenario, "Array.from(document.querySelectorAll('.poster-art img')).slice(0,3).every(function(i){return i.complete&&i.naturalWidth>0;})");
+            saveScreenshot("Flix-catalogo.png");
+            js(scenario, "window.savedTitle=document.querySelector('.poster-card h3').textContent;document.querySelector('.poster-card .favorite-button').click();true");
+            waitForJs(scenario, "document.querySelector('.poster-card .favorite-button').getAttribute('aria-pressed')==='true'");
+            js(scenario, "document.querySelector('.bottom-nav a[href=\"/?view=list\"]').click();true");
+            waitForJs(scenario, "document.querySelector('.page-heading h1') && document.querySelector('.page-heading h1').textContent.indexOf('Minha lista')>=0 && document.querySelector('.poster-grid .poster-card')");
+            saveScreenshot("Flix-minha-lista.png");
+            scenario.onActivity(a->a.testBrowser().reload());
+            waitForJs(scenario, "document.querySelector('.poster-grid .favorite-button[aria-pressed=true]')!==null");
+        }
+    }
+
+    private void saveScreenshot(String filename) throws Exception {
+        android.graphics.Bitmap image=InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+        assertNotNull(image);
+        java.io.File folder=InstrumentationRegistry.getInstrumentation().getContext().getExternalFilesDir("screenshots");
+        assertNotNull(folder);folder.mkdirs();
+        try(java.io.FileOutputStream output=new java.io.FileOutputStream(new java.io.File(folder,filename))){image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output);}
+        image.recycle();
+    }
 }

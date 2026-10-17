@@ -7,6 +7,7 @@ export const EMPTY_LIBRARY:WatchLibrary={favorites:[],history:[]};
 let memory:WatchLibrary=EMPTY_LIBRARY;
 let cachedRaw:string|null|undefined;
 const positive=(n:any, fallback=1)=>Number.isInteger(n)&&n>=1&&n<=10000?n:fallback;
+const seasonNumber=(n:any)=>Number.isInteger(n)&&n>=0&&n<=10000?n:1;
 const seconds=(n:any)=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<=604800?n:0;
 export function parseLibrary(raw:string|null):WatchLibrary {
   try {
@@ -17,7 +18,7 @@ export function parseLibrary(raw:string|null):WatchLibrary {
     const history=(Array.isArray(data?.history)?data.history:[]).flatMap((v:any)=>{
       const title=normalizeTitle(v?.title);if(!title||seen.has(titleKey(title)))return [];
       seen.add(titleKey(title));const duration=seconds(v.duration);const position=Math.min(seconds(v.position),duration||604800);
-      return [{title,season:positive(v.season),episode:positive(v.episode),position,duration,updatedAt:typeof v.updatedAt==='number'&&Number.isFinite(v.updatedAt)&&v.updatedAt>0?Math.min(v.updatedAt,Date.now()):0,completed:duration>0&&position/duration>=.95}];
+      return [{title,season:seasonNumber(v.season),episode:positive(v.episode),position,duration,updatedAt:typeof v.updatedAt==='number'&&Number.isFinite(v.updatedAt)&&v.updatedAt>0?Math.min(v.updatedAt,Date.now()):0,completed:duration>0&&position/duration>=.95}];
     }).sort((a:WatchEntry,b:WatchEntry)=>b.updatedAt-a.updatedAt).slice(0,80);
     return {favorites,history};
   } catch {return {favorites:[],history:[]};}
@@ -39,7 +40,7 @@ export function toggleFavorite(title:Title) {
 export function startWatching(title:Title,season=1,episode=1) {
   const data=readLibrary(),key=titleKey(title),old=data.history.find(h=>titleKey(h.title)===key);
   const same=old?.season===season&&old?.episode===episode;
-  const entry:WatchEntry={title,season:positive(season),episode:positive(episode),position:same&&!old?.completed?old.position:0,duration:same?old?.duration||0:0,updatedAt:Date.now(),completed:false};
+  const entry:WatchEntry={title,season:seasonNumber(season),episode:positive(episode),position:same&&!old?.completed?old.position:0,duration:same?old?.duration||0:0,updatedAt:Date.now(),completed:false};
   save({...data,history:[entry,...data.history.filter(h=>titleKey(h.title)!==key)].slice(0,80)});
   return entry;
 }

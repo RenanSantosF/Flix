@@ -191,7 +191,7 @@ public final class MainActivity extends Activity {
                     boolean test = BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false);
                     if (!test && !("/titulo/" + key.replace(':', '/')).equals(path)) return;
                     clearPlaybackContext(); contextKey = key;
-                    contextSeason = Math.max(1, Math.min(10000, data.optInt("season", 1)));
+                    contextSeason = Math.max(0, Math.min(10000, data.optInt("season", 1)));
                     contextEpisode = Math.max(1, Math.min(10000, data.optInt("episode", 1)));
                     double position = data.optDouble("resume", 0);
                     resumePosition = Double.isFinite(position) ? Math.max(0, Math.min(604800, position)) : 0;
