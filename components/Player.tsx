@@ -37,7 +37,7 @@ const progress=(event:Event)=>{
 const data=(event as CustomEvent).detail;
 if(!started||data?.key!==titleKey(title)||data.season!==season||data.episode!==episode)return;
 if(data.error){setNotice('Este servidor não conseguiu reproduzir o vídeo (erro '+data.error+'). Selecione outro servidor no player ou recarregue.');return;}
-if(data.playing){setMediaReady(true);setNotice('');}
+if(data.playing){setMediaReady(true);setNotice(old=>old.startsWith('Este servidor não conseguiu')?'':old);}
 if(data.ended)setEnded(true);
 if(!data.playing||data.ended||Date.now()-lastSave.current>5000){recordProgress(data.key,season,episode,data.position,data.duration);lastSave.current=Date.now();}
 if(data.ended&&!endHandled.current&&type==='tv'){
