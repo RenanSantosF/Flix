@@ -23,6 +23,9 @@ Fontes ambíguas e recusas HTTP continuam sendo apresentadas como falhas.
 A versão 0.6 mantém o contexto de requisição declarado pelo vídeo e corrige
 a seleção de parser para manifestos sem extensão, usando os bytes já lidos.
 Falhas nativas deixam de ser apagadas por eventos repetidos do navegador.
+A versão 0.7 segue os Locations HTTP 301/302/303/307/308, inclusive HTTPS→HTTP,
+com limite e validação por salto. O transporte HTTP fica no motor de mídia;
+a navegação e a proteção de pop-ups do WebView continuam como antes.
 O aviso inclui diagnóstico copiável com versão do APK/WebView, domínio do frame,
 tipo de fonte e motivo fixo; nenhum caminho, query, cookie ou token é exibido.
 O navegador comum usa o iframe oficial e as próprias regras de pop-up do navegador.

@@ -24,6 +24,9 @@ final class MediaRequestContext {
             case "unsafe-url":case "no-referrer-when-downgrade": referer=page;break;
             default: referer=same?page:origin+"/";
         }
+        // A strict HTTPS document does not send Referer on a downgrade to HTTP.
+        boolean downgrade=target!=null&&target.regionMatches(true,0,"http://",0,7);
+        if(downgrade&&!"unsafe-url".equals(policy)&&!"origin".equals(policy)&&!"origin-when-cross-origin".equals(policy))referer="";
         if(!referer.isEmpty())headers.put("Referer",referer);
         if(!"none".equals(cors))headers.put("Origin",origin);
         return headers;

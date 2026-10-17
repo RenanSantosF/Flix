@@ -67,19 +67,17 @@ final class NativePlayback {
     private DataSource.Factory network(MediaRequestContext context, String userAgent) {
         OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(15,TimeUnit.SECONDS).readTimeout(20,TimeUnit.SECONDS)
-            .followSslRedirects(false)
+            .followRedirects(false).followSslRedirects(false)
+            .proxy(java.net.Proxy.NO_PROXY)
             .dns(hostname -> {
                 List<InetAddress> addresses = Dns.SYSTEM.lookup(hostname);
                 for (InetAddress address : addresses) if (!MediaUrlPolicy.publicAddress(address)) throw new UnknownHostException("Non-public media address");
                 return addresses;
             })
-            .addInterceptor(chain -> {
-                if (!MediaUrlPolicy.allowed(chain.request().url().toString())) throw new IOException("Invalid media URL");
-                return chain.proceed(chain.request());
-            })
+            .addInterceptor(new MediaRedirectInterceptor())
             .addNetworkInterceptor(chain -> {
                 // This also validates every redirect and every HLS/DASH segment/key request.
-                if (!MediaUrlPolicy.allowed(chain.request().url().toString())) throw new IOException("Invalid media redirect");
+                if (!MediaUrlPolicy.allowedNetwork(chain.request().url().toString())) throw new IOException("Invalid media redirect");
                 okhttp3.Request.Builder request=chain.request().newBuilder().removeHeader("Referer").removeHeader("Origin");
                 for(java.util.Map.Entry<String,String> header:context.headers(chain.request().url().toString()).entrySet())request.header(header.getKey(),header.getValue());
                 return chain.proceed(request.build());
@@ -180,7 +178,12 @@ final class NativePlayback {
     private static String failureMessage(PlaybackException error) {
         Throwable cause=error;
         for(int i=0;i<12&&cause!=null;i++,cause=cause.getCause())if(cause instanceof HttpDataSource.InvalidResponseCodeException)
-            return "O servidor recusou o vídeo (HTTP "+((HttpDataSource.InvalidResponseCodeException)cause).responseCode+"). A fonte precisa ser liberada ou corrigida pelo provedor.";
+            return ((HttpDataSource.InvalidResponseCodeException)cause).responseCode>=300&&((HttpDataSource.InvalidResponseCodeException)cause).responseCode<400
+                ?"O servidor retornou um redirecionamento sem destino utilizável (HTTP "+((HttpDataSource.InvalidResponseCodeException)cause).responseCode+")."
+                :"O servidor recusou o vídeo (HTTP "+((HttpDataSource.InvalidResponseCodeException)cause).responseCode+"). A fonte precisa ser liberada ou corrigida pelo provedor.";
+        cause=error;
+        for(int i=0;i<12&&cause!=null;i++,cause=cause.getCause())if(cause instanceof MediaRedirectInterceptor.Failure)
+            return "Falha no redirecionamento de vídeo: "+cause.getMessage()+".";
         if(error.errorCode==PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED||error.errorCode==PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED)
             return "O servidor devolveu uma fonte que não pôde ser lida como vídeo. Tente o principal ou o legendado.";
         return "Não foi possível recuperar este vídeo (código "+error.errorCode+"). Tente o principal ou o legendado.";
