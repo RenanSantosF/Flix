@@ -66,9 +66,12 @@ public final class MainActivity extends Activity {
     private String recoverySource = "";
     private final java.util.HashMap<String,String> recoveryFailures = new java.util.HashMap<>();
     private String observerScript = "";
-    private String testHtml, testBootstrap, testManifest;
+    private String testHtml, testBootstrap, testManifest, testChildHtml;
+    private final AtomicInteger testBrowserPulls=new AtomicInteger(),testBrowserLimits=new AtomicInteger(),testSharedNativePulls=new AtomicInteger();
     private int mediaMessages;
     private boolean nativeWaitingNotice;
+    private Runnable pendingRecovery;
+    private String pendingToken="";
     private String lastMediaOrigin = "", recoveryDiagnostic = "";
     private boolean selfTest() { return BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false); }
 
@@ -111,7 +114,7 @@ public final class MainActivity extends Activity {
                 if(!recoverySource.isEmpty())recoveryFailures.put(recoverySource,failure);
                 notice(message);diagnostic(failure);
             }
-            @Override public void closed() { playbackActive=false;root.setKeepScreenOn(false);updatePipParams(); }
+            @Override public void closed() { nativeSession(false);playbackActive=false;root.setKeepScreenOn(false);updatePipParams(); }
         });
         browser.setWebChromeClient(new WebChromeClient() {
             @Override public void onProgressChanged(WebView view, int value) {
@@ -163,7 +166,15 @@ public final class MainActivity extends Activity {
                     return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream(testBootstrap.getBytes(StandardCharsets.UTF_8)));
                 if(selfTest()&&testManifest!=null&&(NavigationPolicy.HOME+"test-stream.m3u8").equals(url))
                     return new WebResourceResponse("application/vnd.apple.mpegurl","UTF-8",new ByteArrayInputStream(testManifest.getBytes(StandardCharsets.UTF_8)));
+                if(selfTest()&&testChildHtml!=null&&(NavigationPolicy.HOME+"android-test-frame").equals(url))
+                    return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream(testChildHtml.getBytes(StandardCharsets.UTF_8)));
+                if(selfTest()&&(NavigationPolicy.HOME+"test-browser-pull").equals(url)) {testBrowserPulls.incrementAndGet();return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[]{1}));}
+                if(selfTest()&&(NavigationPolicy.HOME+"test-web-limit.mp4").equals(url)) {testBrowserLimits.incrementAndGet();return new WebResourceResponse("video/mp4","UTF-8",429,"Too Many Requests",Collections.singletonMap("Retry-After","2"),new ByteArrayInputStream(new byte[0]));}
                 return null;
+            }
+            @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
+                if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl()))
+                    nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 if (NavigationPolicy.isAppUrl(url)) { lastAppUrl = url; errorPanel.setVisibility(View.GONE); clearPlaybackContext(); }
@@ -222,6 +233,9 @@ public final class MainActivity extends Activity {
                 String raw = message.getData(); if (raw == null || raw.length() > 1024) return;
                 JSONObject data = new JSONObject(raw); String type = data.optString("type");
                 if ("clear".equals(type)) clearPlaybackContext();
+                else if ("native-ready".equals(type)) {
+                    if(pendingRecovery!=null&&pendingToken.equals(data.optString("token"))) {Runnable open=pendingRecovery;pendingRecovery=null;pendingToken="";activeReply=null;open.run();}
+                }
                 else if ("pip".equals(type)) enterPlayerPip();
                 else if ("context".equals(type)) {
                     String key = data.optString("key"); if (!NavigationPolicy.isPlaybackKey(key)) return;
@@ -248,7 +262,7 @@ public final class MainActivity extends Activity {
                 JSONObject data = new JSONObject(raw); String video = data.optString("videoId");
                 double duration = data.optDouble("duration", 0), position = data.optDouble("position", 0);
                 if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || position < 0 || position > 1e12) return;
-                if(nativePlayback!=null&&nativePlayback.isOpen())return;
+                if(pendingRecovery!=null||(nativePlayback!=null&&nativePlayback.isOpen()))return;
                 int error = data.optInt("error", 0);
                 String recoveryReason = "erro de reprodução";
                 if(error==4&&(activeVideo.isEmpty()||activeVideo.equals(video))) {
@@ -264,18 +278,17 @@ public final class MainActivity extends Activity {
                     recoveryReason = recoveryReason(data, source);
                     if(MediaUrlPolicy.allowed(source)&&sourceType.length()<=100&&recoveredSources.size()<2&&recoveredSources.add(source)) {
                         recoverySource=source;
-                        recoveryDiagnostic = mediaDiagnostic(data, sourceOrigin.getHost(), "fonte enviada ao motor nativo");
+                        recoveryDiagnostic = mediaDiagnostic(data, sourceOrigin.getHost(), "transferência exclusiva para o motor nativo");
                         diagnostic(recoveryDiagnostic);
                         activeVideo=video;activeReply=reply;
-                        try { reply.postMessage(new JSONObject().put("type","pause").put("videoId",video).toString()); } catch(Exception ignored) { }
                         exitFullscreen();
-                        try {
+                        prepareNativeRecovery(()->{try {
                             nativePlayback.open(source,sourceType,new MediaRequestContext(data.optString("frameUrl"),sourceOrigin.toString(),data.optString("referrerPolicy"),data.optString("corsMode")),browser.getSettings().getUserAgentString(),
                                 contextKey.startsWith("live:")?0:(position>0?Math.min(position,604800):resumePosition),selfTest()?nativeTestSource:null);
                         } catch(RuntimeException failure) {
                             nativePlayback.close(false);notice("Não foi possível preparar este vídeo. Tente o principal ou o legendado.");
                             String description=recoveryDiagnostic + " · falha ao preparar";recoveryFailures.put(source,description);diagnostic(description);
-                        }
+                        }});
                         return;
                     }
                 }
@@ -308,7 +321,31 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void nativeSession(boolean active) {
+        if(destroyed||contextKey.isEmpty())return;
+        try {JSONObject detail=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode).put("active",active);
+            browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:native-session',{detail:"+detail+"}))",null);
+        }catch(Exception ignored){}
+    }
+    private void prepareNativeRecovery(Runnable open) {
+        String token=java.util.UUID.randomUUID().toString();pendingRecovery=open;pendingToken=token;
+        nativeSession(true);
+        // The provider document is unloaded before the native engine can connect.
+        // Keeping the same iframe node also keeps React's ownership of the DOM.
+        String script="(function(){var f=document.querySelector('#player-frame iframe'),token="+JSONObject.quote(token)+";"
+            +"function ready(){window.FlixControl.postMessage(JSON.stringify({type:'native-ready',token:token}));}"
+            +"if(!f){"+(selfTest()?"ready();":"")+"return;}"
+            +"function done(){try{if(f.contentWindow.location.href!=='about:blank')return;}catch(e){return;}f.removeEventListener('load',done);ready();}"
+            +"f.addEventListener('load',done);f.removeAttribute('srcdoc');f.src='about:blank';})();";
+        browser.evaluateJavascript(script,null);
+        handler.postDelayed(()->{if(pendingRecovery!=null&&pendingToken.equals(token)) {
+            pendingRecovery=null;pendingToken="";nativeSession(false);
+            String message="Não foi possível concluir a transferência do vídeo. Recarregue para voltar aos servidores.";
+            recoveryFailures.put(recoverySource,recoveryDiagnostic+" · transferência não confirmada");notice(message);diagnostic(recoveryFailures.get(recoverySource));
+        }},3000);
+    }
     private void clearPlaybackContext() {
+        pendingRecovery=null;pendingToken="";
         if(nativePlayback!=null)nativePlayback.close(false);
         recoveredSources.clear(); recoveryFailures.clear(); nativeWaitingNotice=false; recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
         contextKey = ""; activeVideo = ""; activeReply = null; resumePosition = 0; playbackActive = false;
@@ -383,7 +420,7 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() {super.onStart();if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
         super.onStop();
-        if (!enteringPip && !isInPictureInPictureMode() && nativePlayback!=null)nativePlayback.pause();
+        if (!enteringPip && !isInPictureInPictureMode()) {pendingRecovery=null;pendingToken="";if(nativePlayback!=null)nativePlayback.pause();}
         if (!enteringPip && !isInPictureInPictureMode() && activeReply != null) {
             try { activeReply.postMessage(new JSONObject().put("type", "pause").put("videoId", activeVideo).toString()); } catch (Exception ignored) { }
         }
@@ -400,7 +437,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed() { if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.close(true); else if (customView != null) exitFullscreen(); else if (browser.canGoBack()) browser.goBack(); else super.onBackPressed(); }
     @Override protected void onSaveInstanceState(Bundle outState) { browser.saveState(outState); super.onSaveInstanceState(outState); }
     @Override protected void onDestroy() {
-        destroyed = true; handler.removeCallbacksAndMessages(null);
+        destroyed = true;pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);
         for (WebView sink : popupSinks) sink.destroy(); popupSinks.clear();
         if(nativePlayback!=null)nativePlayback.close(false);
         browser.stopLoading(); browser.destroy(); super.onDestroy();
@@ -450,6 +487,9 @@ public final class MainActivity extends Activity {
             }).build();nativeTestSource=new androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(client);
     }
     int nativeTestLimitedCount(){return testLimitedRequests.get();}
+    void testChildHtml(String html){if(!selfTest())throw new IllegalStateException("Debug fixture only");testChildHtml=html;}
+    void nativeSharedRateClip(byte[] clip){if(!selfTest())throw new IllegalStateException("Debug fixture only");nativeTestSource=nativePlayback.sharedRateFixture(clip,testSharedNativePulls);}
+    int browserPullCount(){return testBrowserPulls.get();}int browserLimitCount(){return testBrowserLimits.get();}int sharedNativePullCount(){return testSharedNativePulls.get();}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}
     WebView testBrowser() { return browser; }

@@ -48,5 +48,18 @@ public class MediaRateLimitTest {
             assertNull(store.get("origin.example"));assertEquals(15000,store.get("cdn.example").until);
         }
     }
+    @Test public void browserDeadlineBlocksNativeTransportAndCannotBeShortened() throws Exception {
+        AtomicLong clock=new AtomicLong(5000);MediaRateLimit.MemoryStore store=new MediaRateLimit.MemoryStore();
+        MediaRateLimit limiter=new MediaRateLimit(store,clock::get);
+        limiter.observe("cdn.example","20",null);clock.set(6000);limiter.observe("cdn.example","2",null);
+        assertEquals(25000,store.get("cdn.example").until);
+        java.util.concurrent.atomic.AtomicInteger calls=new java.util.concurrent.atomic.AtomicInteger();
+        OkHttpClient client=new OkHttpClient.Builder().addInterceptor(limiter).addInterceptor(chain->{calls.incrementAndGet();return new Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK").body(okhttp3.ResponseBody.create(null,"video")).build();}).build();
+        Request request=new Request.Builder().url("https://cdn.example/video").build();
+        try(Response ignored=client.newCall(request).execute()){fail("Browser deadline must block native requests");}catch(MediaRateLimit.Limited expected){}
+        assertEquals(0,calls.get());clock.set(25000);
+        try(Response response=client.newCall(request).execute()){assertEquals(200,response.code());}
+        assertEquals(1,calls.get());
+    }
     private OkHttpClient client(MediaRateLimit limiter){return new OkHttpClient.Builder().dns(h->Collections.singletonList(InetAddress.getLoopbackAddress())).addInterceptor(limiter).build();}
 }

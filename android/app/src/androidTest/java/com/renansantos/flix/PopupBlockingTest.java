@@ -229,7 +229,7 @@ public class PopupBlockingTest {
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
             js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
-            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.8-player (8)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.9-player (9)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
             saveScreenshot("Flix-recuperacao-blob.png");
         }
@@ -327,6 +327,54 @@ public class PopupBlockingTest {
             AtomicReference<Integer> count=new AtomicReference<>(0);scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(1,(int)count.get());
             js(scenario,"window.lastNotice='';true");js(scenario,context);js(scenario,media);waitForJs(scenario,"window.lastNotice.indexOf('HTTP 429')>=0");
             scenario.onActivity(a->count.set(a.nativeTestLimitedCount()));assertEquals(1,(int)count.get());
+        }
+    }
+
+    private byte[] recoveryClip() throws Exception {
+        try(java.io.InputStream stream=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("recovery-clip.base64")) {
+            java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] b=new byte[4096];int n;
+            while((n=stream.read(b))!=-1)out.write(b,0,n);
+            return android.util.Base64.decode(out.toByteArray(),android.util.Base64.DEFAULT);
+        }
+    }
+    @Test public void nativeHandoffUnloadsProviderBeforePlayingAndKeepsAppProgressAlive() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            byte[] clip=recoveryClip();
+            scenario.onActivity(a->{a.nativeTestClip(clip);a.testChildHtml("<!doctype html><script>setInterval(function(){fetch('/test-browser-pull')},100)</script>");});
+            load(scenario,"<!doctype html><title>Popup test</title><div id='player-frame'><iframe></iframe></div><script>window.lastProgress=null;window.parentTicks=0;window.sessionEvents=[];setInterval(function(){parentTicks++},100);window.addEventListener('flix:progress',function(e){lastProgress=e.detail});window.addEventListener('flix:native-session',function(e){sessionEvents.push(e.detail.active)});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));document.querySelector('iframe').src='/android-test-frame';true");
+            SystemClock.sleep(750);
+            AtomicReference<Integer> pulls=new AtomicReference<>(0);scenario.onActivity(a->pulls.set(a.browserPullCount()));assertTrue(pulls.get()>0);
+            js(scenario,"FlixMedia.postMessage(JSON.stringify({videoId:'exclusive:1',error:4,position:0,duration:0,source:'https://flix-ebon-ten.vercel.app/test-media.mp4',sourceKind:'https'}));true");
+            waitForJs(scenario,"lastProgress && lastProgress.playing && lastProgress.position>=0.65");
+            assertEquals("true",js(scenario,"document.querySelector('iframe').contentWindow.location.href==='about:blank' && sessionEvents[0]===true"));
+            SystemClock.sleep(300);scenario.onActivity(a->pulls.set(a.browserPullCount()));int stopped=pulls.get();
+            int ticks=Integer.parseInt(js(scenario,"parentTicks"));SystemClock.sleep(600);
+            scenario.onActivity(a->pulls.set(a.browserPullCount()));assertEquals(stopped,(int)pulls.get());assertTrue(Integer.parseInt(js(scenario,"parentTicks"))>ticks);
+            scenario.onActivity(a->a.onBackPressed());waitForJs(scenario,"sessionEvents[sessionEvents.length-1]===false");
+            assertEquals("true",js(scenario,"document.querySelector('iframe').contentWindow.location.href==='about:blank'"));
+            SystemClock.sleep(300);scenario.onActivity(a->pulls.set(a.browserPullCount()));assertEquals(stopped,(int)pulls.get());
+            saveScreenshot("Flix-transferencia-exclusiva.png");
+        }
+    }
+    @Test public void browser429IsSharedBeforeNativeMakesItsFirstMediaRequest() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            byte[] clip=recoveryClip();
+            scenario.onActivity(a->{a.getSharedPreferences("media-cooldowns",android.content.Context.MODE_PRIVATE).edit().clear().commit();a.nativeSharedRateClip(clip);a.testChildHtml("<!doctype html><video src='/test-web-limit.mp4'></video>");});
+            load(scenario,"<!doctype html><title>Popup test</title><div id='player-frame'><iframe></iframe></div><script>window.lastProgress=null;window.lastNotice='';window.addEventListener('flix:progress',function(e){lastProgress=e.detail});window.addEventListener('flix:notice',function(e){lastNotice=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            long start=SystemClock.elapsedRealtime();
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));document.querySelector('iframe').src='/android-test-frame';true");
+            waitForJs(scenario,"lastNotice.indexOf('HTTP 429')>=0");
+            AtomicReference<Integer> browserCount=new AtomicReference<>(0),nativeCount=new AtomicReference<>(0);
+            scenario.onActivity(a->{browserCount.set(a.browserLimitCount());nativeCount.set(a.sharedNativePullCount());});
+            assertEquals(1,(int)browserCount.get());assertEquals(0,(int)nativeCount.get());
+            waitForJs(scenario,"lastProgress && lastProgress.playing");assertTrue(SystemClock.elapsedRealtime()-start>=2000);
+            scenario.onActivity(a->{browserCount.set(a.browserLimitCount());nativeCount.set(a.sharedNativePullCount());});
+            assertEquals(1,(int)browserCount.get());assertEquals(1,(int)nativeCount.get());
+            assertEquals("true",js(scenario,"document.querySelector('iframe').contentWindow.location.href==='about:blank'"));
+            saveScreenshot("Flix-primeiro-429-compartilhado.png");
         }
     }
 
