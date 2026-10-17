@@ -418,6 +418,21 @@ public final class MainActivity extends Activity {
             @Override public void close() throws java.io.IOException {if(delegate!=null)delegate.close();}
         };
     }
+    private final java.util.concurrent.atomic.AtomicInteger testRedirects=new java.util.concurrent.atomic.AtomicInteger();
+    void nativeTestRedirectClip(byte[] clip) {
+        if(!selfTest())throw new IllegalStateException("Debug fixture only");
+        okhttp3.OkHttpClient client=new okhttp3.OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
+            .addInterceptor(new MediaRedirectInterceptor()).addInterceptor(chain->{
+                okhttp3.Response.Builder response=new okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1);
+                if(chain.request().url().isHttps()) {
+                    testRedirects.incrementAndGet();return response.code(302).message("Found").header("Location","http://cdn.provider.example/video.mp4")
+                        .body(okhttp3.ResponseBody.create(okhttp3.MediaType.parse("text/plain"),new byte[0])).build();
+                }
+                return response.code(200).message("OK").body(okhttp3.ResponseBody.create(okhttp3.MediaType.parse("video/mp4"),clip)).build();
+            }).build();
+        nativeTestSource=new androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(client);
+    }
+    int nativeTestRedirectCount(){return testRedirects.get();}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}
     WebView testBrowser() { return browser; }

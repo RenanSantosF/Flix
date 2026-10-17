@@ -229,7 +229,7 @@ public class PopupBlockingTest {
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
             js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
-            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.6-player (6)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.7-player (7)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
             saveScreenshot("Flix-recuperacao-blob.png");
         }
@@ -269,6 +269,27 @@ public class PopupBlockingTest {
             assertEquals(original,js(scenario,"window.lastDiagnostic"));assertEquals("0",js(scenario,"window.errors"));
             assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('token=')<0 && window.lastDiagnostic.indexOf('test-media.mp4')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(true);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertFalse(open.get());
+        }
+    }
+
+    @Test public void nativeRecoveryFollows302ToHttpAndDecodesVideo() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            final byte[] bytes;
+            try(java.io.InputStream stream=InstrumentationRegistry.getInstrumentation().getContext().getAssets().open("recovery-clip.base64")) {
+                java.io.ByteArrayOutputStream output=new java.io.ByteArrayOutputStream();byte[] buffer=new byte[4096];int n;
+                while((n=stream.read(buffer))!=-1)output.write(buffer,0,n);bytes=android.util.Base64.decode(output.toByteArray(),android.util.Base64.DEFAULT);
+            }
+            scenario.onActivity(a->a.nativeTestRedirectClip(bytes));
+            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastProgress=null;window.lastNotice='';window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail});window.addEventListener('flix:notice',function(e){window.lastNotice=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
+            js(scenario,"FlixMedia.postMessage(JSON.stringify({videoId:'redirect:1',error:4,position:0,duration:0,source:'https://flix-ebon-ten.vercel.app/test-redirect.mp4',sourceKind:'https'}));true");
+            waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
+            AtomicReference<Boolean> open=new AtomicReference<>(false);AtomicReference<Integer> redirects=new AtomicReference<>(0);
+            scenario.onActivity(a->{open.set(a.isNativePlaybackOpen());redirects.set(a.nativeTestRedirectCount());});
+            assertTrue(open.get());assertTrue(redirects.get()>0);
+            assertTrue(android.security.NetworkSecurityPolicy.getInstance().isCleartextTrafficPermitted("cdn.provider.example"));
+            saveScreenshot("Flix-recuperacao-302.png");
         }
     }
 

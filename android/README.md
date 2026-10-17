@@ -1,5 +1,27 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.7: HTTP 301/302/303/307/308 é tratado como redirecionamento, seguindo
+somente o Location retornado, até dez saltos. Corrige a recusa de HTTPS→HTTP
+que fazia o Media3 receber HTTP 302 sem alcançar o arquivo. Endereços privados,
+credenciais na URL, esquemas diferentes de HTTP(S) e ciclos são rejeitados antes
+da próxima conexão. A validação DNS continua em todos os destinos, sem proxy.
+Cookies/cabeçalhos são recalculados por destino; Cookie e Authorization do salto
+anterior não são copiados. Políticas estritas omitem Referer no downgrade.
+
+O manifesto permite transporte HTTP para o motor nativo porque os destinos de
+mídia do provedor são dinâmicos. A fonte inicial da ponte continua limitada a
+HTTPS; navegação do app, subframes e a política de conteúdo misto do WebView
+continuam restritos a HTTPS. Requisições HTTP de mídia só partem do carregador
+nativo a partir dos Locations ou recursos de playlist fornecidos pelo servidor.
+O motor não executa HTML/JavaScript nem abre janelas. Não há alteração no sink
+de pop-ups que já funciona. Não há alteração de certificados TLS de produção.
+
+Testes de rede usam servidores locais HTTP e HTTPS, com certificado confiado
+exclusivamente pelo cliente de teste, para comprovar HTTPS→302→HTTP, Range,
+queries assinadas, destinos recusados, ciclos, limite e ausência de retry em 403.
+O emulador também decodifica um vídeo real após uma resposta 302 do transporte
+de teste usando o mesmo interceptor de redirecionamento da produção.
+
 Versão 0.6: o motor mantém o Referer conforme a política declarada no documento
 (sem fragmento), o Origin quando o vídeo declara CORS e a seleção de cookies
 correspondente a `crossorigin`. O endereço do frame precisa ter a mesma origem
@@ -39,8 +61,8 @@ contornadas verificações. Blobs sem uma fonte ou manifesto HTTPS inequívoco n
 O link passa somente da página para o decodificador local; nunca vai ao site,
 logs, analytics ou a um servidor de extração.
 
-As requisições nativas mantêm TLS, rejeitam protocolos inseguros e destinos
-locais/privados, inclusive em DNS, segmentos e redirecionamentos. Cookies são
+Requisições HTTPS nativas mantêm a verificação TLS; URLs de mídia e redirecionamentos
+aceitam apenas HTTP(S) público, rejeitando destinos locais/privados inclusive em DNS e segmentos. Cookies são
 selecionados novamente por domínio a cada requisição; não existe um cabeçalho
 Cookie global. O Referer segue a política do documento; o destino recebe apenas o contexto permitido por ela.
 Uma recusa HTTP não é contornada nem repetida automaticamente. Há no máximo
