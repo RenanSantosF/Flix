@@ -1,5 +1,5 @@
 export const SUPERFLIX_ORIGIN='https://superflixapi.fun';
-export type LiveItem={id:string;kind:'channel'|'event';name:string;image:string;category:string;sport:string;competition:string;status:'live'|'upcoming'|'ended'|'unknown';startsAt:string;timeLabel:string;playUrl:string;pageUrl:string;channels:string[]};
+export type LiveItem={id:string;kind:'channel'|'event';name:string;image:string;category:string;sport:string;competition:string;status:'live'|'upcoming'|'ended'|'unknown';startsAt:string;timeLabel:string;dateKey:string;playUrl:string;pageUrl:string;channels:string[]};
 export type LiveCatalog={channels:LiveItem[];events:LiveItem[];errors:{channels?:string;events?:string};updatedAt:string};
 type Row=Record<string,unknown>;
 const row=(v:unknown):Row=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Row:{};
@@ -22,7 +22,7 @@ export function liveStatus(value:unknown):LiveItem['status'] {
  if(['upcoming','scheduled','agendado','notstarted','soon'].includes(s))return 'upcoming';return 'unknown';
 }
 export function normalizeLive(value:unknown,kind:'channel'|'event'):LiveItem|null {
- const v=row(value),name=str(v.name,v.title,v.nome,v.event_name,v.channel_name);if(!name)return null;
+ const v=row(value);if(v.is_active===false)return null;const name=str(v.name,v.title,v.nome,v.event_name,v.channel_name);if(!name)return null;
  const playUrl=providerUrl(kind==='event'?str(v.play_event_url,v.play_url,v.player_url,v.embed_url):str(v.play_url,v.player_url,v.embed_url,v.iframe_url));
  const pageUrl=providerUrl(str(v.page_url,v.url,v.link));
  // Never invent playback endpoints. A missing play URL uses the provider's returned page.
@@ -35,8 +35,9 @@ export function normalizeLive(value:unknown,kind:'channel'|'event'):LiveItem|nul
  const date=str(v.start_at,v.starts_at,v.start_time,v.start_datetime,v.datetime,v.date_time,v.date);
  // Dates without an offset stay as provider text: do not guess a timezone.
  const startsAt=/^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(Z|[+-]\d\d:?\d\d)$/.test(date)&&Number.isFinite(Date.parse(date))?new Date(date).toISOString():'';
- const channels=Array.isArray(v.channels)?v.channels.map(c=>typeof c==='string'?c:str(row(c).name,row(c).title)).filter(Boolean).slice(0,20):[];
- return {id,kind,name,image:imageUrl(str(v.event_logo,v.logo,v.image,v.poster,v.thumbnail)),category,sport:str(sport.name,typeof v.sport==='string'?v.sport:'',v.sport_name),competition:str(competition.name,typeof v.competition==='string'?v.competition:'',v.league),status:liveStatus(v.status),startsAt,timeLabel:startsAt?'':str(v.time,v.horario,date),playUrl:target,pageUrl,channels};
+ const linked=Array.isArray(v.channels)?v.channels:Array.isArray(v.embeds)?v.embeds:[];
+ const channels=linked.map(c=>typeof c==='string'?c:str(row(c).name,row(c).provider,row(c).title)).filter(Boolean).slice(0,20);
+ return {id,kind,name,image:imageUrl(str(v.event_logo,v.logo_url,v.logo,v.image,v.poster,v.thumbnail)),category,sport:str(sport.name,typeof v.sport==='string'?v.sport:'',v.sport_name,category,v.sport_key),competition:str(competition.name,typeof v.competition==='string'?v.competition:'',v.league),status:liveStatus(v.status),startsAt,dateKey:/^\d{4}-\d\d-\d\d/.test(date)?date.slice(0,10):'',timeLabel:startsAt?'':str(v.time,v.horario,date),playUrl:target,pageUrl,channels};
 }
 export function normalizeLiveList(value:unknown,kind:'channel'|'event'):LiveItem[]{const seen=new Set<string>();return liveRows(value,kind).map(v=>normalizeLive(v,kind)).filter((v):v is LiveItem=>{if(!v||seen.has(v.id))return false;seen.add(v.id);return true})}
-export function liveTime(item:LiveItem){return item.startsAt?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(item.startsAt)):item.timeLabel||'Horário a confirmar'}
+export function liveTime(item:LiveItem){if(!item.startsAt&&/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d/.test(item.timeLabel)){const s=item.timeLabel;return s.slice(8,10)+'/'+s.slice(5,7)+' · '+s.slice(11,16)}return item.startsAt?new Intl.DateTimeFormat('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}).format(new Date(item.startsAt)):item.timeLabel||'Horário a confirmar'}

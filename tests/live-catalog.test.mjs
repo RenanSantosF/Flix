@@ -15,5 +15,12 @@ test('untrusted origins, credentials and unsafe schemes cannot become playback U
  assert.equal(normalizeLive({name:'Unsafe',play_url:'https://evil.example/'},'channel'),null);
 });
 test('timezone-less dates stay provider text and unknown statuses never become live',()=>{
- const item=normalizeLive({id:'abc',title:'Evento',play_event_url:'/eventos/abc',date:'2026-10-17 19:30',status:'mystery'},'event');assert.equal(item.startsAt,'');assert.equal(liveTime(item),'2026-10-17 19:30');assert.equal(item.status,'unknown');assert.equal(liveStatus('ao vivo'),'live');assert.equal(liveStatus('finished'),'ended');
+ const item=normalizeLive({id:'abc',title:'Evento',play_event_url:'/eventos/abc',date:'2026-10-17 19:30',status:'mystery'},'event');assert.equal(item.startsAt,'');assert.equal(liveTime(item),'17/10 · 19:30');assert.equal(item.status,'unknown');assert.equal(liveStatus('ao vivo'),'live');assert.equal(liveStatus('finished'),'ended');
+});
+
+test('observed public API fields retain channel logos and event broadcasters',()=>{
+ const channel=normalizeLive({id:'sportv',name:'SporTV',logo_url:'https://superflixapi.fun/img/sportv.png',embed_url:'https://superflixapi.fun/canal/sportv',category:'Esportes',is_active:true},'channel');
+ assert.equal(channel.image,'https://superflixapi.fun/img/sportv.png');assert.equal(channel.playUrl,'https://superflixapi.fun/canal/sportv');
+ const event=normalizeLive({id:'copa-das-nacoes-semifinal',title:'Copa das Nações: semifinal',category:'Futsal',sport_key:'futsal',start_time:'2026-10-17 18:00:00',status:'live',play_event_url:'https://superflixapi.fun/eventos/copa-das-nacoes-copa-das-nacoes-semifinal-2',embeds:[{provider:'SporTV',embed_url:'https://superflixapi.fun/canal/sportv'}]},'event');
+ assert.deepEqual(event.channels,['SporTV']);assert.equal(event.sport,'Futsal');assert.equal(event.dateKey,'2026-10-17');assert.equal(liveTime(event),'17/10 · 18:00');assert.equal(normalizeLive({id:'off',name:'Off',embed_url:'/canal/off',is_active:false},'channel'),null);
 });

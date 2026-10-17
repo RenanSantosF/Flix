@@ -20,8 +20,8 @@ O navegador comum usa o iframe oficial e as próprias regras de pop-up do navega
 `/lista?category=eventos&format=json`, com cache de 60 segundos e timeout.
 Busca por canal/time/competição, categorias derivadas dos canais, canais
 favoritos locais, agenda e filtro de eventos explicitamente marcados ao vivo.
-Horários com offset são exibidos em Brasília; datas sem fuso ficam como texto
-do provedor. Nunca inferimos que um jogo está ao vivo só pelo horário.
+Horários com offset são exibidos em Brasília; datas sem fuso mantêm o horário
+informado pelo provedor, com data e hora legíveis. Nunca inferimos que um jogo está ao vivo só pelo horário.
 
 URLs de reprodução vêm da resposta oficial e precisam pertencer ao domínio
 SuperFlixAPI HTTPS. `play_event_url` preserva os canais vinculados ao evento.
@@ -31,10 +31,11 @@ Se a consulta falhar, o usuário pode tentar a página de canais/agenda do próp
 provedor dentro do player protegido do app. A disponibilidade e a permissão de
 embed dessas páginas dependem do provedor.
 
-Limite de validação: as consultas do ambiente de desenvolvimento retornaram
-HTTP 403. Os testes de normalização usam fixtures baseadas na documentação,
-não respostas reais gravadas. Conferir formato e reprodução do catálogo real
-em um dispositivo/conexão aceitos pelo provedor. O servidor alternativo é
+Validação: a rota do backend consultou o catálogo público real com HTTP 200
+(327 canais e 265 eventos em 17/10/2026). Os campos `logo_url`, `embed_url`,
+`start_time`, `category` e `embeds[].provider` foram conferidos na resposta real
+e têm teste de regressão. A disponibilidade do catálogo muda com a programação.
+A página de reprodução exige verificação humana neste ambiente; não foi contornada. O servidor alternativo é
 controlado pelo provedor; testes sintéticos de compatibilidade não comprovam
 sua disponibilidade real.
 
