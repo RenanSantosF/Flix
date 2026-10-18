@@ -555,7 +555,7 @@ public class PopupBlockingTest {
             assertTrue(SystemClock.elapsedRealtime()-start>=2000);
             scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});
             assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());
-            assertEquals("true",js(scenario,"ticks>15 && document.querySelector('video').readyState>=3 && lastNotice===''") );
+            waitForJs(scenario,"ticks>15 && document.querySelector('video').readyState>=3 && lastNotice===''");
             saveScreenshot("Flix-retomada-WebView-429.png");
         }
     }
@@ -589,7 +589,7 @@ public class PopupBlockingTest {
             scenario.onActivity(a->{requests.set(a.testWebRetryCount());held.set(a.testHeldRequests());opens.set(a.nativeOpenCount());interval.set(a.testWebRetryInterval());});
             assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());assertTrue("Provider retry must wait locally",held.get()>=1);
             assertTrue("No second network request before Retry-After: "+interval.get(),interval.get()>=2000);
-            assertEquals("true",js(scenario,"ticks>15 && !stopped && document.querySelector('iframe').contentWindow.document.querySelector('video').readyState>=3"));
+            waitForJs(scenario,"ticks>15 && !stopped && document.querySelector('iframe').contentWindow.document.querySelector('video').readyState>=3");
             saveScreenshot("Flix-espera-da-repeticao-do-provedor.png");
         }
     }
