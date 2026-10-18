@@ -9,7 +9,8 @@
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
       var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
       var recoveryDelay = 5000, lastAdTime = 0;
-      var wantedPlayback = new WeakMap(), browserRetried = new WeakSet();
+      var wantedPlayback = new WeakMap(), browserRetried = new WeakSet(), startedVideos = new WeakSet();
+      function retryWanted(video) { return !startedVideos.has(video)&&(wantedPlayback.get(video)===true||!video.paused); }
       function identity(video) {
         var id=ids.get(video);
         if(!id){id=prefix+(++next);ids.set(video,id);videos[id]=video;}
@@ -102,7 +103,7 @@
         var adLoading=loadingAdVisible();
         if ((raw || adLoading) && Date.now() - (stateTimes.get(video) || 0) >= 3000) {
           stateTimes.set(video,Date.now());
-          win.FlixMedia.postMessage(JSON.stringify({videoId:identity(video),event:'state',retryWanted:wantedPlayback.get(video)===true||!video.paused,source:/^https?:\/\//i.test(raw)&&raw.length<=4096?raw:'',sourceKind:!raw?'missing':/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',adLoading:adLoading,
+          win.FlixMedia.postMessage(JSON.stringify({videoId:identity(video),event:'state',retryWanted:retryWanted(video),source:/^https?:\/\//i.test(raw)&&raw.length<=4096?raw:'',sourceKind:!raw?'missing':/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',adLoading:adLoading,
             readyState:video.readyState,networkState:video.networkState,position:0,duration:0,error:0}));
         }
       }
@@ -110,6 +111,7 @@
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
         if (loadingAdVisible()) {cancelRecovery(video);reportState(video);return;}
+        if(video.readyState>=3&&(video.currentTime>0.1||event==='playing'))startedVideos.add(video);
         if (!error && video.readyState < 3) reportState(video);
         if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
         // Give the provider's own error handlers time to replace a temporary source.
@@ -122,7 +124,7 @@
         var source = {source:'', sourceType:'', sourceKind:'', sourceReason:''};
         if (error === 4) source = mediaSource(video);
         if (error) failedVideos.set(video, {until:event === 'recovery-scan' ? (failedVideos.get(video) || {until:now}).until : now + 5000, signature:source.source + ':' + source.sourceReason, error:error});
-        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, retryWanted:wantedPlayback.get(video)===true||!video.paused, source:source.source, sourceType:source.sourceType.slice(0,100),
+        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, retryWanted:retryWanted(video), source:source.source, sourceType:source.sourceType.slice(0,100),
           sourceKind:source.sourceKind, sourceReason:source.sourceReason,
           frameUrl:error === 4 && win.location ? String(win.location.href).slice(0,4096) : '',
           referrerPolicy:error === 4 ? String(win.document.referrerPolicy || '').slice(0,64) : '',
@@ -137,7 +139,7 @@
           if (data.type === 'retry-source') {
             // Retry the assigned URL in its original document/cookie context only.
             var assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'';
-            if(browserRetried.has(video)||video.isConnected===false||assigned!==data.source||!/^https:\/\//i.test(assigned)||video.readyState!==0||video.ended||loadingAdVisible()||!(wantedPlayback.get(video)===true||!video.paused))return;
+            if(browserRetried.has(video)||video.isConnected===false||assigned!==data.source||!/^https:\/\//i.test(assigned)||video.readyState!==0||video.ended||loadingAdVisible()||!retryWanted(video))return;
             browserRetried.add(video);cancelRecovery(video);failedVideos.delete(video);
             video.load();
             var playing=video.play();if(playing&&playing.catch)playing.catch(function(){reportState(video);});

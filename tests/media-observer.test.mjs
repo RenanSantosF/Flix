@@ -148,3 +148,11 @@ test('retry command cannot restart a paused, removed, replaced, ready or ad vide
   f.command(command);assert.equal(f.video.loads,0,mode);assert.equal(f.video.plays,0,mode);
  }
 });
+
+
+test('a video that has already played cannot be reset by a delayed browser retry',()=>{
+ const f=fixture();f.video.src='https://cdn.example/movie';f.video.paused=false;f.advance(3000);f.scan();
+ const state=f.messages.at(-1);f.video.readyState=4;f.video.duration=60;f.emit('playing');
+ f.video.readyState=0;f.command({type:'retry-source',videoId:state.videoId,source:state.source});
+ assert.equal(f.video.loads,0);assert.equal(f.video.plays,0);
+});
