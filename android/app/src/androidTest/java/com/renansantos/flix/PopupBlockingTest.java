@@ -227,9 +227,9 @@ public class PopupBlockingTest {
             load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><video></video><script>window.lastProgress=null;window.lastDiagnostic='';window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail});window.addEventListener('flix:diagnostic',function(e){window.lastDiagnostic=e.detail});</script>");
             waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
-            js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
+            js(scenario,"document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));setTimeout(function(){fetch('/test-stream.m3u8').then(function(r){return r.text()})},100);true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
-            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.12-diagnostic (12)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf("+org.json.JSONObject.quote("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+")")+")>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
             saveScreenshot("Flix-recuperacao-blob.png");
         }
