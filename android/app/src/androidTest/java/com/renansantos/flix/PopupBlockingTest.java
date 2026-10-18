@@ -341,7 +341,7 @@ public class PopupBlockingTest {
         try(ActivityScenario<MainActivity> scenario=launch()) {
             byte[] clip=recoveryClip();String video=android.util.Base64.encodeToString(clip,android.util.Base64.NO_WRAP);
             scenario.onActivity(a->a.nativeTestClip(clip));
-            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><button style='height:64px;width:100%' onclick=\"var v=document.querySelector('video');document.querySelector('source').src='https://flix-ebon-ten.vercel.app/temporary.mp4';v.load();v.play().catch(function(){});setTimeout(function(){v.innerHTML='';v.src='data:video/mp4;base64,"+video+"';v.load();v.play().catch(function(){});},1500);\">Assistir</button><video controls playsinline><source type='video/not-supported'></video><script>window.lastProgress=null;window.lastDiagnostic='';window.addEventListener('flix:progress',function(e){lastProgress=e.detail});window.addEventListener('flix:diagnostic',function(e){lastDiagnostic=e.detail});</script>");
+            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><button style='height:64px;width:100%' onclick=\"var v=document.querySelector('video');document.querySelector('source').src='https://flix-ebon-ten.vercel.app/temporary.mp4';v.load();v.play().catch(function(){});setTimeout(function(){v.innerHTML='';v.src='data:video/mp4;base64,"+video+"';v.load();v.play().catch(function(){});},1500);\">Assistir</button><video controls playsinline><source type='video/not-supported'></video><script>window.htmlErrors=0;document.addEventListener('error',function(e){if(e.target.tagName==='SOURCE'||e.target.tagName==='VIDEO')htmlErrors++;},true);window.lastProgress=null;window.lastDiagnostic='';window.addEventListener('flix:progress',function(e){lastProgress=e.detail});window.addEventListener('flix:diagnostic',function(e){lastDiagnostic=e.detail});</script>");
             waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,50,32);
             waitForJs(scenario,"lastProgress && lastProgress.playing && lastProgress.position>=2");
@@ -350,7 +350,7 @@ public class PopupBlockingTest {
             AtomicReference<Integer> opens=new AtomicReference<>(-1);AtomicReference<Boolean> nativeOpen=new AtomicReference<>(true);
             scenario.onActivity(a->{opens.set(a.nativeOpenCount());nativeOpen.set(a.isNativePlaybackOpen());});
             assertEquals(0,(int)opens.get());assertFalse(nativeOpen.get());
-            assertEquals("true",js(scenario,"!document.querySelector('video').paused && document.querySelector('video').currentTime>4 && lastDiagnostic.indexOf('motor nativo')<0"));
+            assertEquals("true",js(scenario,"htmlErrors>0 && !document.querySelector('video').paused && document.querySelector('video').currentTime>4 && lastDiagnostic.indexOf('motor nativo')<0"));
             saveScreenshot("Flix-recuperacao-do-proprio-player.png");
         }
     }
