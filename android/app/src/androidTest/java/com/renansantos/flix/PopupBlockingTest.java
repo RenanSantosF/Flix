@@ -229,7 +229,7 @@ public class PopupBlockingTest {
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
             js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
-            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.10-player (10)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.11-diagnostic (11)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
             saveScreenshot("Flix-recuperacao-blob.png");
         }
@@ -337,6 +337,18 @@ public class PopupBlockingTest {
             return android.util.Base64.decode(out.toByteArray(),android.util.Base64.DEFAULT);
         }
     }
+    @Test public void stalledProviderShowsSanitizedWebViewEvidenceWithoutStartingNativeOrReloading() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            scenario.onActivity(a->a.testStallDelay(1500));
+            load(scenario,"<!doctype html><title>Popup test</title><script>window.lastDiagnostic='';window.addEventListener('flix:diagnostic',function(e){lastDiagnostic=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));FlixMedia.postMessage(JSON.stringify({videoId:'state:1',event:'state',sourceKind:'https',adLoading:true,readyState:0,networkState:2,position:0,duration:0,error:0}));console.error('Mixed Content: insecure video blocked https://cdn.example/private?token=secret');true");
+            waitForJs(scenario,"lastDiagnostic.indexOf('sem reprodução')>=0");
+            assertEquals("true",js(scenario,"lastDiagnostic.indexOf('Loading ad')>=0 && lastDiagnostic.indexOf('readyState 0')>=0 && lastDiagnostic.indexOf('networkState 2')>=0 && lastDiagnostic.indexOf('conteúdo HTTP bloqueado')>=0 && lastDiagnostic.indexOf('token')<0 && lastDiagnostic.indexOf('cdn.example')<0"));
+            AtomicReference<Integer> opens=new AtomicReference<>(-1);scenario.onActivity(a->opens.set(a.nativeOpenCount()));assertEquals(0,(int)opens.get());
+        }
+    }
+
     @Test public void providerRecoversTemporaryHtmlFailureWithoutOpeningNativePlayer() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()) {
             byte[] clip=recoveryClip();String video=android.util.Base64.encodeToString(clip,android.util.Base64.NO_WRAP);
