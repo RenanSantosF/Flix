@@ -28,7 +28,8 @@ final class FullscreenPlayerLayout extends FrameLayout {
     private boolean locked, pip, released, gesture, candidate, childCancelled, volumeSide;
     private float downX, downY, startBrightness;
     private int startVolume;
-    private final Runnable hide = () -> { if(!locked){top.setVisibility(GONE);transport.setVisibility(GONE);}feedback.setVisibility(GONE); };
+    private final Runnable hide = this::hideControls;
+    private void hideControls(){if(!locked){top.setVisibility(GONE);transport.setVisibility(GONE);}feedback.setVisibility(GONE);}
 
     FullscreenPlayerLayout(Activity activity, View surface, Actions actions) {
         super(activity);this.activity=activity;
