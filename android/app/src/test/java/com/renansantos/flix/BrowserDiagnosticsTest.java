@@ -31,6 +31,7 @@ public class BrowserDiagnosticsTest {
     }
     @Test public void javascriptDetailsKeepOnlySafeSymbolsAndKnownErrorTemplates(){
         assertEquals("TypeError: null.postMessage",BrowserDiagnostics.jsError("Uncaught TypeError: Cannot read properties of null (reading 'postMessage') https://secret.example/?token=hidden"));
+        assertEquals("TypeError: null.closed",BrowserDiagnostics.jsError("Uncaught TypeError: Cannot read property 'closed' of null"));
         assertEquals("ReferenceError: adPlayer não definido",BrowserDiagnostics.jsError("ReferenceError: adPlayer is not defined"));
         assertEquals("TypeError: player.play não é função",BrowserDiagnostics.jsError("TypeError: player.play is not a function"));
         assertEquals("SyntaxError: resposta HTML",BrowserDiagnostics.jsError("SyntaxError: Unexpected token '<'"));

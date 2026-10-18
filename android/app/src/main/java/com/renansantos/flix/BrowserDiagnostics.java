@@ -74,6 +74,8 @@ final class BrowserDiagnostics {
         String s=message==null?"":message.substring(0,Math.min(8192,message.length()));
         Matcher read=Pattern.compile("Cannot read properties of (null|undefined).*?reading ['\"]([A-Za-z_$][A-Za-z0-9_$]{0,40})['\"]").matcher(s);
         if(read.find())return "TypeError: "+read.group(1)+"."+read.group(2);
+        Matcher legacy=Pattern.compile("Cannot read property ['\"]([A-Za-z_$][A-Za-z0-9_$]{0,40})['\"] of (null|undefined)").matcher(s);
+        if(legacy.find())return "TypeError: "+legacy.group(2)+"."+legacy.group(1);
         Matcher fn=Pattern.compile("([A-Za-z_$][A-Za-z0-9_$]{0,30}(?:\\.[A-Za-z_$][A-Za-z0-9_$]{0,30}){0,3}) is not a function").matcher(s);
         if(fn.find())return "TypeError: "+fn.group(1)+" não é função";
         Matcher ref=Pattern.compile("ReferenceError: ([A-Za-z_$][A-Za-z0-9_$]{0,40}) is not defined").matcher(s);
