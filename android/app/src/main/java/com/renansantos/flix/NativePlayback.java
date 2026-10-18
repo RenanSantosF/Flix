@@ -107,14 +107,15 @@ final class NativePlayback {
         OkHttpDataSource.Factory factory=new OkHttpDataSource.Factory(client).setUserAgent(userAgent);
         return factory; // Keep file/data/content URIs unavailable even inside playlists.
     }
-    void browserLimited(String url,java.util.Map<String,String> headers) {
-        if(!MediaUrlPolicy.allowedNetwork(url)||headers==null)return;
+    MediaRateLimit.Deadline browserLimited(String url,java.util.Map<String,String> headers) {
+        if(!MediaUrlPolicy.allowedNetwork(url))return null;
+        if(headers==null)headers=java.util.Collections.emptyMap();
         String host=android.net.Uri.parse(url).getHost(),retryAfter=null,date=null;
         for(java.util.Map.Entry<String,String> entry:headers.entrySet()) {
             if("Retry-After".equalsIgnoreCase(entry.getKey()))retryAfter=entry.getValue();
             if("Date".equalsIgnoreCase(entry.getKey()))date=entry.getValue();
         }
-        if(host!=null)rateLimit.observe(host,retryAfter,date);
+        return host==null?null:rateLimit.observe(host,retryAfter,date);
     }
     DataSource.Factory sharedRateFixture(byte[] clip,java.util.concurrent.atomic.AtomicInteger calls) {
         okhttp3.OkHttpClient client=new okhttp3.OkHttpClient.Builder().addInterceptor(new MediaRedirectInterceptor()).addInterceptor(rateLimit).addInterceptor(chain->{

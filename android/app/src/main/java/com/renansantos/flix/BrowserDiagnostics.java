@@ -20,6 +20,7 @@ final class BrowserDiagnostics {
         if(http.size()>=32&&!http.containsKey(url))http.remove(http.keySet().iterator().next());
         http.put(url,code);add("HTTP "+code+" · "+host(url)+" · "+resource(destination,mime,url));
     }
+    synchronized void retry(String source){if(source!=null)http.remove(withoutFragment(source));}
     synchronized void adLoading(){add("interface exibiu Loading ad");}
     synchronized void blockedFrame(String scheme){add("frame "+("http".equals(scheme)?"HTTP":"externo")+" bloqueado");}
     synchronized void network(int code){network(code,"","","");}

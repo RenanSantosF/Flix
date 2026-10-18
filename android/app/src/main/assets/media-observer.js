@@ -9,6 +9,13 @@
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
       var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
       var recoveryDelay = 5000, lastAdTime = 0;
+      var wantedPlayback = new WeakMap(), browserRetried = new WeakSet(), startedVideos = new WeakSet();
+      function retryWanted(video) { return !startedVideos.has(video)&&(wantedPlayback.get(video)===true||!video.paused); }
+      function identity(video) {
+        var id=ids.get(video);
+        if(!id){id=prefix+(++next);ids.set(video,id);videos[id]=video;}
+        return id;
+      }
       var prefix = Math.random().toString(36).slice(2) + ':';
       // Resource Timing describes requests already made by this frame. Do not fetch,
       // guess URLs or inspect provider internals. Only an unambiguous, recent manifest
@@ -96,7 +103,7 @@
         var adLoading=loadingAdVisible();
         if ((raw || adLoading) && Date.now() - (stateTimes.get(video) || 0) >= 3000) {
           stateTimes.set(video,Date.now());
-          win.FlixMedia.postMessage(JSON.stringify({videoId:prefix+'state',event:'state',source:/^https?:\/\//i.test(raw)&&raw.length<=4096?raw:'',sourceKind:!raw?'missing':/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',adLoading:adLoading,
+          win.FlixMedia.postMessage(JSON.stringify({videoId:identity(video),event:'state',retryWanted:retryWanted(video),source:/^https?:\/\//i.test(raw)&&raw.length<=4096?raw:'',sourceKind:!raw?'missing':/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',adLoading:adLoading,
             readyState:video.readyState,networkState:video.networkState,position:0,duration:0,error:0}));
         }
       }
@@ -104,20 +111,20 @@
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
         if (loadingAdVisible()) {cancelRecovery(video);reportState(video);return;}
+        if(video.readyState>=3&&(video.currentTime>0.1||event==='playing'))startedVideos.add(video);
         if (!error && video.readyState < 3) reportState(video);
         if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
         // Give the provider's own error handlers time to replace a temporary source.
         // Never unload its document while that recovery can still complete.
         if (error === 4 && !settled && event !== 'recovery-scan') { queueRecovery(video, event, sourceError); return; }
-        var id = ids.get(video);
-        if (!id) { id = prefix + (++next); ids.set(video, id); videos[id] = video; }
+        var id = identity(video);
         var now = Date.now();
         if (event === 'timeupdate' && now - lastTime < 1000) return;
         lastTime = now;
         var source = {source:'', sourceType:'', sourceKind:'', sourceReason:''};
         if (error === 4) source = mediaSource(video);
         if (error) failedVideos.set(video, {until:event === 'recovery-scan' ? (failedVideos.get(video) || {until:now}).until : now + 5000, signature:source.source + ':' + source.sourceReason, error:error});
-        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, source:source.source, sourceType:source.sourceType.slice(0,100),
+        win.FlixMedia.postMessage(JSON.stringify({videoId:id, event:event, retryWanted:retryWanted(video), source:source.source, sourceType:source.sourceType.slice(0,100),
           sourceKind:source.sourceKind, sourceReason:source.sourceReason,
           frameUrl:error === 4 && win.location ? String(win.location.href).slice(0,4096) : '',
           referrerPolicy:error === 4 ? String(win.document.referrerPolicy || '').slice(0,64) : '',
@@ -129,14 +136,25 @@
         try {
           var data = JSON.parse(event.data), video = videos[data.videoId];
           if (!video) return;
-          if (data.type === 'restore' && isFinite(data.position) && data.position > 0 && isFinite(video.duration)) {
+          if (data.type === 'retry-source') {
+            // Retry the assigned URL in its original document/cookie context only.
+            var assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'';
+            if(browserRetried.has(video)||video.isConnected===false||assigned!==data.source||!/^https:\/\//i.test(assigned)||video.readyState!==0||video.ended||loadingAdVisible()||!retryWanted(video))return;
+            browserRetried.add(video);cancelRecovery(video);failedVideos.delete(video);
+            video.load();
+            var playing=video.play();if(playing&&playing.catch)playing.catch(function(){reportState(video);});
+          } else if (data.type === 'restore' && isFinite(data.position) && data.position > 0 && isFinite(video.duration)) {
             video.currentTime = Math.max(0, Math.min(data.position, video.duration - 1));
-          } else if (data.type === 'pause') { video.pause(); send(video, 'pause'); }
+          } else if (data.type === 'pause') { wantedPlayback.set(video,false);video.pause(); send(video, 'pause'); }
         } catch (_) {}
       };
       ['loadstart','emptied','error','loadedmetadata','durationchange','play','playing','pause','ended','seeked','timeupdate'].forEach(function (event) {
         win.document.addEventListener(event, function (e) {
           var source = e.target;
+          if(source instanceof win.HTMLVideoElement) {
+            if(event==='play'||event==='playing')wantedPlayback.set(source,true);
+            if(event==='ended'||(event==='pause'&&!source.error&&source.networkState!==win.HTMLMediaElement.NETWORK_NO_SOURCE))wantedPlayback.set(source,false);
+          }
           if (event === 'emptied' || event === 'loadstart') {
             if (source instanceof win.HTMLVideoElement) { cancelRecovery(source); failedVideos.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
             return;

@@ -9,7 +9,8 @@ function fixture(){
  function advance(ms){const until=time+ms;for(;;){const due=[...timers].filter(([,v])=>v.at<=until).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;time=due[1].at;timers.delete(due[0]);due[1].fn();}time=until;}
  const messages=[], listeners={}, labels=[];
  class Video{
-  currentSrc='';src='';readyState=0;duration=NaN;currentTime=0;paused=true;ended=false;error=null;children=[];
+  currentSrc='';src='';readyState=0;duration=NaN;currentTime=0;paused=true;ended=false;error=null;children=[];loads=0;plays=0;
+  load(){this.loads++}play(){this.plays++;this.paused=false;return Promise.resolve()}pause(){this.paused=true}
   querySelector(){return this.children[0]||null}querySelectorAll(){return this.children}
  }
  const video=new Video(), videos=[video];
@@ -23,7 +24,7 @@ function fixture(){
  vm.runInNewContext(observerScript,{window:win,Date:class extends Date{static now(){return time}}});
  return {video,videos,messages,label:(text,visible=true)=>{const label={textContent:text,getClientRects:()=>visible?[{}]:[]};labels.push(label);return label},style:fn=>{win.getComputedStyle=fn},clearLabels:()=>{labels.length=0},error:(settle=true)=>{video.error={code:4};listeners.error({target:video});if(settle)advance(5000)},
   resource:(url,initiatorType='fetch',startTime=time)=>{const entry={name:url,initiatorType,startTime};resources.push(entry);resourceObserver({getEntries:()=>[entry]})},
-  scan:()=>scan(),advance,emit:name=>listeners[name]?.({target:video})};
+  command:data=>win.FlixMedia.onmessage({data:JSON.stringify(data)}),scan:()=>scan(),advance,emit:name=>listeners[name]?.({target:video})};
 }
 test('direct sources reach the local bridge on error 4 only',()=>{
  const f=fixture();f.video.src='https://cdn.example/video.mp4?token=private';f.video.duration=60;f.emit('loadedmetadata');
@@ -124,4 +125,34 @@ test('an ad label hidden by an ancestor does not suppress the movie',()=>{
  const f=fixture(),label=f.label('Loading ad'),parent={};label.parentElement=parent;
  f.style(node=>({visibility:'visible',display:'block',opacity:node===parent?'0':'1'}));
  f.video.src='https://cdn.example/movie.mp4';f.error();assert.equal(f.messages.at(-1).source,f.video.src);
+});
+
+
+test('a local retry reuses the same assigned source once without replacing the document',()=>{
+ const f=fixture();f.video.src='https://cdn.example/media?token=secret';f.video.paused=false;f.advance(3000);f.scan();
+ const state=f.messages.at(-1);assert.equal(state.retryWanted,true);assert.notEqual(state.videoId.split(':').at(-1),'state');
+ const command={type:'retry-source',videoId:state.videoId,source:state.source};f.command(command);f.command(command);
+ assert.equal(f.video.loads,1);assert.equal(f.video.plays,1);assert.equal(f.video.src,command.source);
+});
+test('retry command cannot restart a paused, removed, replaced, ready or ad video',()=>{
+ for(const mode of ['pause','removed','replaced','ready','ad','wrong-id','wrong-source']){
+  const f=fixture();f.video.src='https://cdn.example/media';f.video.paused=false;f.advance(3000);f.scan();
+  const state=f.messages.at(-1),command={type:'retry-source',videoId:state.videoId,source:state.source};
+  if(mode==='pause'){f.video.paused=true;f.emit('pause')}
+  if(mode==='removed')f.video.isConnected=false;
+  if(mode==='replaced')f.video.src='https://cdn.example/other';
+  if(mode==='ready')f.video.readyState=1;
+  if(mode==='ad')f.label('Loading ad');
+  if(mode==='wrong-id')command.videoId='old:1';
+  if(mode==='wrong-source')command.source='https://other.example/media';
+  f.command(command);assert.equal(f.video.loads,0,mode);assert.equal(f.video.plays,0,mode);
+ }
+});
+
+
+test('a video that has already played cannot be reset by a delayed browser retry',()=>{
+ const f=fixture();f.video.src='https://cdn.example/movie';f.video.paused=false;f.advance(3000);f.scan();
+ const state=f.messages.at(-1);f.video.readyState=4;f.video.duration=60;f.emit('playing');
+ f.video.readyState=0;f.command({type:'retry-source',videoId:state.videoId,source:state.source});
+ assert.equal(f.video.loads,0);assert.equal(f.video.plays,0);
 });
