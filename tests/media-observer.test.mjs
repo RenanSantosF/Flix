@@ -89,11 +89,11 @@ test('a removed failed video cannot transfer its obsolete source to the native p
 });
 
 
-test('an unready video reports bounded state without exposing its source URL or querying media',()=>{
+test('an unready video supplies its assigned source only to the local diagnostic bridge',()=>{
  const f=fixture();f.video.src='https://cdn.example/private?token=secret';f.video.readyState=0;f.video.networkState=2;
  f.advance(3000);f.scan();const state=f.messages.at(-1);
  assert.equal(state.event,'state');assert.equal(state.sourceKind,'https');assert.equal(state.readyState,0);assert.equal(state.networkState,2);
- assert.equal(JSON.stringify(state).includes('secret'),false);assert.equal(JSON.stringify(state).includes('cdn.example'),false);
+ assert.equal(state.source,f.video.src);
  const count=f.messages.length;f.scan();assert.equal(f.messages.length,count);
 });
 
@@ -101,8 +101,8 @@ test('an unready video reports bounded state without exposing its source URL or 
 test('visible Loading ad is diagnostic state and never a native recovery source or movie progress',()=>{
  const f=fixture();f.label('Loading ad');f.video.src='https://player.example/ad?token=secret';f.video.duration=30;f.video.paused=false;
  f.advance(3000);f.emit('playing');f.error();
- assert.ok(f.messages.length>0);assert.ok(f.messages.every(m=>m.event==='state' && m.adLoading===true && !m.source && !m.playing));
- assert.equal(JSON.stringify(f.messages).includes('secret'),false);
+ assert.ok(f.messages.length>0);assert.ok(f.messages.every(m=>m.event==='state' && m.adLoading===true && !m.playing));
+ assert.ok(f.messages.every(m=>m.error!==4));
  f.clearLabels();f.video.error=null;f.video.src='https://cdn.example/movie.mp4';f.video.readyState=4;f.emit('loadstart');f.emit('playing');
  assert.ok(f.messages.at(-1).playing);
 });

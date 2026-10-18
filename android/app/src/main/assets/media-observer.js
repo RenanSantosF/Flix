@@ -1,6 +1,7 @@
 (function () {
-  // Reports media state. On error 4 only, the already assigned source goes to the
-  // local Android decoder; no URLs, cookies or page HTML are sent to the website.
+  // Reports media state and assigned sources only to the local Android bridge.
+  // State uses the source for in-memory correlation; only error 4 can invoke the
+  // decoder. No URLs, cookies or page HTML are sent to the website.
   function install(win) {
     try {
       if (win.__flixMediaObserver || !win.FlixMedia) return;
@@ -95,7 +96,7 @@
         var adLoading=loadingAdVisible();
         if ((raw || adLoading) && Date.now() - (stateTimes.get(video) || 0) >= 3000) {
           stateTimes.set(video,Date.now());
-          win.FlixMedia.postMessage(JSON.stringify({videoId:prefix+'state',event:'state',sourceKind:!raw?'missing':/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',adLoading:adLoading,
+          win.FlixMedia.postMessage(JSON.stringify({videoId:prefix+'state',event:'state',source:/^https?:\/\//i.test(raw)&&raw.length<=4096?raw:'',sourceKind:!raw?'missing':/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',adLoading:adLoading,
             readyState:video.readyState,networkState:video.networkState,position:0,duration:0,error:0}));
         }
       }
