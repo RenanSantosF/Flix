@@ -6,7 +6,8 @@
       if (win.__flixMediaObserver || !win.FlixMedia) return;
       win.__flixMediaObserver = true;
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
-      var manifests = [], observer, epochs = new WeakMap();
+      var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap();
+      var recoveryDelay = 5000;
       var prefix = Math.random().toString(36).slice(2) + ':';
       // Resource Timing describes requests already made by this frame. Do not fetch,
       // guess URLs or inspect provider internals. Only an unambiguous, recent manifest
@@ -51,10 +52,34 @@
         if (result.source.length > 4096) { result.source = ''; result.sourceReason = 'source-too-long'; }
         return result;
       }
-      function send(video, event, sourceError) {
+      function cancelRecovery(video) {
+        var attempt = pending.get(video);
+        if (attempt) { win.clearTimeout(attempt.timer); pending.delete(video); }
+      }
+      function queueRecovery(video, event, sourceError) {
+        var signature = video.currentSrc || video.src || Array.from(video.querySelectorAll('source[src]')).map(function (s) { return s.src; }).join('|');
+        var old = pending.get(video);
+        if (old && old.signature === signature) return;
+        cancelRecovery(video);
+        var attempt = {signature:signature, timer:0};
+        pending.set(video, attempt);
+        attempt.timer = win.setTimeout(function () {
+          if (pending.get(video) !== attempt) return;
+          pending.delete(video);
+          var current = video.currentSrc || video.src || Array.from(video.querySelectorAll('source[src]')).map(function (s) { return s.src; }).join('|');
+          if (video.isConnected === false || current !== signature || video.readyState > 0 || video.ended) return;
+          var candidates = Array.from(video.querySelectorAll('source[src]'));
+          var failedSources = sourceError === 4 && video.networkState === win.HTMLMediaElement.NETWORK_NO_SOURCE && candidates.length && candidates.every(function (s) { return sourceFailures.get(s) === s.src; });
+          if ((video.error && video.error.code === 4) || failedSources) send(video, event, sourceError, true);
+        }, recoveryDelay);
+      }
+      function send(video, event, sourceError, settled) {
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
         if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
+        // Give the provider's own error handlers time to replace a temporary source.
+        // Never unload its document while that recovery can still complete.
+        if (error === 4 && !settled && event !== 'recovery-scan') { queueRecovery(video, event, sourceError); return; }
         var id = ids.get(video);
         if (!id) { id = prefix + (++next); ids.set(video, id); videos[id] = video; }
         var now = Date.now();
@@ -84,9 +109,10 @@
         win.document.addEventListener(event, function (e) {
           var source = e.target;
           if (event === 'emptied' || event === 'loadstart') {
-            if (source instanceof win.HTMLVideoElement) { failedVideos.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
+            if (source instanceof win.HTMLVideoElement) { cancelRecovery(source); failedVideos.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
             return;
           }
+          if ((event === 'loadedmetadata' || event === 'playing' || event === 'ended') && source instanceof win.HTMLVideoElement) cancelRecovery(source);
           // A source rejected by MIME emits its own error; video.error can stay null.
           // Wait for all candidates to fail before recovering this video.
           if (event === 'error' && source instanceof win.HTMLSourceElement && source.parentElement instanceof win.HTMLVideoElement) {

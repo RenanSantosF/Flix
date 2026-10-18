@@ -229,7 +229,7 @@ public class PopupBlockingTest {
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
             js(scenario,"fetch('/test-stream.m3u8').then(function(r){return r.text()}).then(function(){setTimeout(function(){document.querySelector('video').src=URL.createObjectURL(new Blob(['invalid video'],{type:'video/mp4'}));},100);});true");
             waitForJs(scenario,"window.lastProgress && window.lastProgress.playing && window.lastProgress.position>=0.65");
-            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.9-player (9)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
+            assertEquals("true",js(scenario,"window.lastDiagnostic.indexOf('Flix 0.10-player (10)')>=0 && window.lastDiagnostic.indexOf('fonte blob')>=0 && window.lastDiagnostic.indexOf('test-stream')<0"));
             AtomicReference<Boolean> open=new AtomicReference<>(false);scenario.onActivity(a->open.set(a.isNativePlaybackOpen()));assertTrue(open.get());
             saveScreenshot("Flix-recuperacao-blob.png");
         }
@@ -337,6 +337,24 @@ public class PopupBlockingTest {
             return android.util.Base64.decode(out.toByteArray(),android.util.Base64.DEFAULT);
         }
     }
+    @Test public void providerRecoversTemporaryHtmlFailureWithoutOpeningNativePlayer() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            byte[] clip=recoveryClip();String video=android.util.Base64.encodeToString(clip,android.util.Base64.NO_WRAP);
+            scenario.onActivity(a->a.nativeTestClip(clip));
+            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><button style='height:64px;width:100%' onclick=\"var v=document.querySelector('video');document.querySelector('source').src='https://flix-ebon-ten.vercel.app/temporary.mp4';v.load();v.play().catch(function(){});setTimeout(function(){v.innerHTML='';v.src='data:video/mp4;base64,"+video+"';v.load();v.play().catch(function(){});},1500);\">Assistir</button><video controls playsinline><source type='video/not-supported'></video><script>window.lastProgress=null;window.lastDiagnostic='';window.addEventListener('flix:progress',function(e){lastProgress=e.detail});window.addEventListener('flix:diagnostic',function(e){lastDiagnostic=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,50,32);
+            waitForJs(scenario,"lastProgress && lastProgress.playing && lastProgress.position>=2");
+            // Pass the grace deadline: a stale timer must not steal recovered playback.
+            SystemClock.sleep(3500);
+            AtomicReference<Integer> opens=new AtomicReference<>(-1);AtomicReference<Boolean> nativeOpen=new AtomicReference<>(true);
+            scenario.onActivity(a->{opens.set(a.nativeOpenCount());nativeOpen.set(a.isNativePlaybackOpen());});
+            assertEquals(0,(int)opens.get());assertFalse(nativeOpen.get());
+            assertEquals("true",js(scenario,"!document.querySelector('video').paused && document.querySelector('video').currentTime>4 && lastDiagnostic.indexOf('motor nativo')<0"));
+            saveScreenshot("Flix-recuperacao-do-proprio-player.png");
+        }
+    }
+
     @Test public void nativeHandoffUnloadsProviderBeforePlayingAndKeepsAppProgressAlive() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()) {
             byte[] clip=recoveryClip();
@@ -370,7 +388,7 @@ public class PopupBlockingTest {
             AtomicReference<Integer> browserCount=new AtomicReference<>(0),nativeCount=new AtomicReference<>(0);
             scenario.onActivity(a->{browserCount.set(a.browserLimitCount());nativeCount.set(a.sharedNativePullCount());});
             assertEquals(1,(int)browserCount.get());assertEquals(0,(int)nativeCount.get());
-            waitForJs(scenario,"lastProgress && lastProgress.playing");assertTrue(SystemClock.elapsedRealtime()-start>=2000);
+            waitForJs(scenario,"lastProgress && lastProgress.playing");assertTrue(SystemClock.elapsedRealtime()-start>=8000);
             scenario.onActivity(a->{browserCount.set(a.browserLimitCount());nativeCount.set(a.sharedNativePullCount());});
             assertEquals(1,(int)browserCount.get());assertEquals(1,(int)nativeCount.get());
             assertEquals("true",js(scenario,"document.querySelector('iframe').contentWindow.location.href==='about:blank'"));

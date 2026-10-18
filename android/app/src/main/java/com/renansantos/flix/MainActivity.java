@@ -58,7 +58,7 @@ public final class MainActivity extends Activity {
     private String lastAppUrl = NavigationPolicy.HOME, contextKey = "", activeVideo = "";
     private int contextSeason = 1, contextEpisode = 1;
     private double resumePosition;
-    private boolean playbackActive, documentStartObserver, destroyed, enteringPip;
+    private boolean playbackActive, documentStartObserver, destroyed, enteringPip, foreground;
     private JavaScriptReplyProxy activeReply;
     private NativePlayback nativePlayback;
     private androidx.media3.datasource.DataSource.Factory nativeTestSource;
@@ -68,7 +68,7 @@ public final class MainActivity extends Activity {
     private String observerScript = "";
     private String testHtml, testBootstrap, testManifest, testChildHtml;
     private final AtomicInteger testBrowserPulls=new AtomicInteger(),testBrowserLimits=new AtomicInteger(),testSharedNativePulls=new AtomicInteger();
-    private int mediaMessages;
+    private int mediaMessages, testNativeOpens;
     private boolean nativeWaitingNotice;
     private Runnable pendingRecovery;
     private String pendingToken="";
@@ -169,7 +169,7 @@ public final class MainActivity extends Activity {
                 if(selfTest()&&testChildHtml!=null&&(NavigationPolicy.HOME+"android-test-frame").equals(url))
                     return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream(testChildHtml.getBytes(StandardCharsets.UTF_8)));
                 if(selfTest()&&(NavigationPolicy.HOME+"test-browser-pull").equals(url)) {testBrowserPulls.incrementAndGet();return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[]{1}));}
-                if(selfTest()&&(NavigationPolicy.HOME+"test-web-limit.mp4").equals(url)) {testBrowserLimits.incrementAndGet();return new WebResourceResponse("video/mp4","UTF-8",429,"Too Many Requests",Collections.singletonMap("Retry-After","2"),new ByteArrayInputStream(new byte[0]));}
+                if(selfTest()&&(NavigationPolicy.HOME+"test-web-limit.mp4").equals(url)) {testBrowserLimits.incrementAndGet();return new WebResourceResponse("video/mp4","UTF-8",429,"Too Many Requests",Collections.singletonMap("Retry-After","8"),new ByteArrayInputStream(new byte[0]));}
                 return null;
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
@@ -265,7 +265,7 @@ public final class MainActivity extends Activity {
                 if(pendingRecovery!=null||(nativePlayback!=null&&nativePlayback.isOpen()))return;
                 int error = data.optInt("error", 0);
                 String recoveryReason = "erro de reprodução";
-                if(error==4&&(activeVideo.isEmpty()||activeVideo.equals(video))) {
+                if(error==4&&foreground&&(activeVideo.isEmpty()||activeVideo.equals(video))) {
                     String source=data.optString("source"),sourceType=data.optString("sourceType");
                     // The browser may report the same error again after pause/scan.
                     // Never replace the native HTTP/format/decoder failure with a
@@ -283,6 +283,7 @@ public final class MainActivity extends Activity {
                         activeVideo=video;activeReply=reply;
                         exitFullscreen();
                         prepareNativeRecovery(()->{try {
+                            if(selfTest())testNativeOpens++;
                             nativePlayback.open(source,sourceType,new MediaRequestContext(data.optString("frameUrl"),sourceOrigin.toString(),data.optString("referrerPolicy"),data.optString("corsMode")),browser.getSettings().getUserAgentString(),
                                 contextKey.startsWith("live:")?0:(position>0?Math.min(position,604800):resumePosition),selfTest()?nativeTestSource:null);
                         } catch(RuntimeException failure) {
@@ -417,9 +418,9 @@ public final class MainActivity extends Activity {
         if (inPip) { root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
         else { restoreInlineLayout(); root.requestApplyInsets(); }
     }
-    @Override protected void onStart() {super.onStart();if(nativePlayback!=null)nativePlayback.visible();}
+    @Override protected void onStart() {super.onStart();foreground=true;if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
-        super.onStop();
+        super.onStop();foreground=false;
         if (!enteringPip && !isInPictureInPictureMode()) {if(pendingRecovery!=null)nativeSession(false);pendingRecovery=null;pendingToken="";if(nativePlayback!=null)nativePlayback.pause();}
         if (!enteringPip && !isInPictureInPictureMode() && activeReply != null) {
             try { activeReply.postMessage(new JSONObject().put("type", "pause").put("videoId", activeVideo).toString()); } catch (Exception ignored) { }
@@ -490,6 +491,7 @@ public final class MainActivity extends Activity {
     void testChildHtml(String html){if(!selfTest())throw new IllegalStateException("Debug fixture only");testChildHtml=html;}
     void nativeSharedRateClip(byte[] clip){if(!selfTest())throw new IllegalStateException("Debug fixture only");nativeTestSource=nativePlayback.sharedRateFixture(clip,testSharedNativePulls);}
     int browserPullCount(){return testBrowserPulls.get();}int browserLimitCount(){return testBrowserLimits.get();}int sharedNativePullCount(){return testSharedNativePulls.get();}
+    int nativeOpenCount(){return testNativeOpens;}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}
     WebView testBrowser() { return browser; }

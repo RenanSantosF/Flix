@@ -1,5 +1,20 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.10: um erro 4 não entrega mais a fonte imediatamente ao motor nativo.
+O observador aguarda cinco segundos de falha estável, deixando os handlers do
+próprio player trocar uma fonte temporária ou retomar o carregamento. Uma nova
+carga, metadados válidos ou reprodução cancelam a transferência pendente. Cada
+nova carga recebe seu próprio prazo. O fallback só recebe uma fonte que ainda
+esteja falhando ao final; não há novas requisições de sondagem nem liberação de
+pop-ups. A recuperação de manifesto tardio continua após a primeira espera.
+
+Testes cobrem a falha temporária recuperada pelo próprio player, o cancelamento
+do timer antigo e uma falha persistente que só chega ao fallback após o prazo.
+No emulador, um vídeo rejeitado pelo HTML é substituído pelo handler da página
+e segue tocando sem nenhuma abertura nativa. Outros cenários mantêm a cobertura
+do fallback, redirecionamentos, espera de 429 e PiP. O servidor alternativo real
+continua dependendo de validação no aparelho; este ajuste não prova sua causa.
+
 Versão 0.9: a transferência para o motor nativo descarrega todo o iframe do
 provedor, em vez de apenas pausar seu HTMLVideoElement. O motor só inicia após
 o documento principal confirmar o carregamento de about:blank, com token por
