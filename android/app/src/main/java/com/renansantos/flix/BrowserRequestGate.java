@@ -24,6 +24,9 @@ final class BrowserRequestGate {
         if(!MediaUrlPolicy.allowed(value)||deadline==null)return false;
         String url=key(value);Entry entry=limits.get(url);
         if(entry==null){if(limits.size()>=32)limits.remove(limits.keySet().iterator().next());entry=new Entry(deadline.until);limits.put(url,entry);}
+        String host=java.net.URI.create(url).getHost();
+        for(java.util.Map.Entry<String,Entry> item:limits.entrySet())
+            if(host.equalsIgnoreCase(java.net.URI.create(item.getKey()).getHost()))item.getValue().until=Math.max(item.getValue().until,deadline.until);
         entry.until=Math.max(entry.until,deadline.until);
         entry.terminal=entry.terminal||entry.retried||entry.until-clock.getAsLong()>MAX_WAIT;
         notifyAll();return entry.terminal&&url.equals(source);

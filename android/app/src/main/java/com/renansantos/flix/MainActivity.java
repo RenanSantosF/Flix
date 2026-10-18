@@ -298,7 +298,7 @@ public final class MainActivity extends Activity {
                 if("state".equals(data.optString("event"))) {
                     if(data.optBoolean("adLoading",false))browserDiagnostics.adLoading();
                     browserDiagnostics.source(data.optString("source"),sourceOrigin.toString());
-                    requestGate.source(data.optBoolean("adLoading",false)?"":data.optString("source"));
+                    requestGate.source(data.optString("source"));
                     if(requestGate.terminal()){stopLimitedProvider();return;}
                     browserDiagnostics.state(data.optString("sourceKind"),data.optInt("readyState",-1),data.optInt("networkState",-1));
                     observeWebRetry(data,reply);

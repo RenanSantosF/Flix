@@ -53,6 +53,17 @@ public class BrowserRequestGateTest {
         gate.source(MEDIA);assertTrue(gate.terminal());assertFalse(gate.await(MEDIA,()->fail("Long wait")));
         gate.clear();gate.source(MEDIA);assertFalse(gate.terminal());assertFalse(gate.ownsRetry(MEDIA));
     }
+    @Test public void aLaterHostDeadlinePostponesTheAlreadyWaitingCurrentVideo() throws Exception {
+        AtomicLong now=new AtomicLong(1000);BrowserRequestGate gate=new BrowserRequestGate(now::get);
+        gate.source(MEDIA);gate.limited(MEDIA,new MediaRateLimit.Deadline(3000,true));
+        ExecutorService worker=Executors.newSingleThreadExecutor();CountDownLatch waiting=new CountDownLatch(1);
+        try{
+            Future<Boolean> result=worker.submit(()->gate.await(MEDIA,waiting::countDown));assertTrue(waiting.await(1,TimeUnit.SECONDS));
+            gate.limited("https://cdn.example/other.mp4",new MediaRateLimit.Deadline(5000,true));
+            now.set(3000);gate.visible(true);assertFalse(result.isDone());
+            now.set(5000);gate.visible(true);assertTrue(result.get(1,TimeUnit.SECONDS));
+        }finally{worker.shutdownNow();}
+    }
     @Test public void appInitiatedRetryAlsoCountsTowardSecondRefusal(){
         BrowserRequestGate gate=new BrowserRequestGate(()->1000);gate.source(MEDIA);gate.limited(MEDIA,new MediaRateLimit.Deadline(2000,true));
         gate.appRetry(MEDIA);assertTrue(gate.limited(MEDIA,new MediaRateLimit.Deadline(3000,true)));assertTrue(gate.terminal());
