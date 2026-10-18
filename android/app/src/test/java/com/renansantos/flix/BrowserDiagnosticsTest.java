@@ -6,8 +6,8 @@ public class BrowserDiagnosticsTest {
         BrowserDiagnostics d=new BrowserDiagnostics();
         d.console("Mixed Content: blocked http://cdn.example/private?token=secret Cookie=session");
         d.console("Uncaught TypeError: https://private.example/secret");
-        String s=d.summary("");assertTrue(s.contains("conteúdo HTTP bloqueado"));assertTrue(s.contains("erro JavaScript"));
-        for(String privateText:new String[]{"cdn.example","private.example","token","Cookie","secret"})assertFalse(s.contains(privateText));
+        String s=d.summary("");assertTrue(s.contains("conteúdo HTTP bloqueado"));assertTrue(s.contains("erro JavaScript"));assertTrue(s.contains("cdn.example"));
+        for(String privateText:new String[]{"private.example","/private","token","Cookie","secret"})assertFalse(s.contains(privateText));
     }
     @Test public void originalSourceHttpStatusIsMatchedLocallyAndClearedWithTheContext(){
         BrowserDiagnostics d=new BrowserDiagnostics();String url="https://cdn.example/media?token=secret";
@@ -44,6 +44,38 @@ public class BrowserDiagnosticsTest {
         d.source(source,"https://player.example");d.http(source,429);d.retry(source);
         assertFalse(d.summary("").contains("fonte atual HTTP"));
         d.http(source,429);assertTrue(d.summary("").contains("fonte atual HTTP 429"));
+    }
+
+    @Test public void expectedCloudflareProbesDoNotConsumeBlockingErrorSlots(){
+        BrowserDiagnostics d=new BrowserDiagnostics();
+        d.http("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/pat/private?token=secret",401);
+        d.network(-2,"https://brunhild.challenges.cloudflare.com/secret","","net::ERR_NAME_NOT_RESOLVED");
+        d.http("https://video.example/source?token=secret",403,"video","application/json");
+        String s=d.summary("");assertTrue(s.contains("HTTP 403 · video.example"));assertTrue(s.contains("auxiliares:"));assertTrue(s.contains("PAT indisponível"));assertTrue(s.contains("teste DNS auxiliar"));
+        assertFalse(s.contains("HTTP 401"));assertFalse(s.contains("rede -2"));assertFalse(s.contains("secret"));
+        d.clear();assertFalse(d.summary("").contains("auxiliares:"));
+    }
+    @Test public void realChallengeEndpointFailuresAndOther401sRemainVisible(){
+        BrowserDiagnostics d=new BrowserDiagnostics();
+        d.http("https://challenges.cloudflare.com/not-a-pat",401);
+        d.http("https://media.example/cdn-cgi/challenge-platform/h/g/pat/private",401);
+        d.network(-2,"https://challenges.cloudflare.com/widget","script","ERR_NAME_NOT_RESOLVED");
+        d.network(-6,"https://brunhild.challenges.cloudflare.com/widget","script","ERR_CONNECTION_REFUSED");
+        String s=d.summary("");assertTrue(s.contains("HTTP 401 · challenges.cloudflare.com"));assertTrue(s.contains("HTTP 401 · media.example"));assertTrue(s.contains("rede -2"));assertTrue(s.contains("ERR_CONNECTION_REFUSED"));
+    }
+    @Test public void mixedContentAutoupgradesAreNotReportedAsBlocksAndTargetsStaySanitized(){
+        BrowserDiagnostics d=new BrowserDiagnostics();
+        d.console("Mixed Content: The page requested an insecure video 'http://cdn.example/private?token=secret'. This request was automatically upgraded to HTTPS.");
+        assertFalse(d.summary("").contains("conteúdo HTTP bloqueado"));assertTrue(d.summary("").contains("HTTP atualizado para HTTPS · mídia · cdn.example"));
+        d.console("Mixed Content: requested an insecure script 'http://ads.example/private?token=secret'. This request has been blocked.");
+        String s=d.summary("");assertTrue(s.contains("conteúdo HTTP bloqueado · script · ads.example"));assertFalse(s.contains("secret"));assertFalse(s.contains("/private"));
+    }
+    @Test public void cspReportsDirectiveAndHostButReportOnlyDoesNotClaimBlocking(){
+        BrowserDiagnostics d=new BrowserDiagnostics();
+        d.console("[Report-Only] Refused to load 'https://observe.example/private?token=secret' because it violates Content Security Policy directive: script-src");
+        assertFalse(d.summary("").contains("CSP bloqueou"));
+        d.console("Refused to connect to 'https://media.example/private?token=secret' because it violates Content Security Policy directive: connect-src");
+        String s=d.summary("");assertTrue(s.contains("política CSP bloqueou recurso · connect-src · media.example"));assertFalse(s.contains("secret"));assertFalse(s.contains("/private"));
     }
 
 }

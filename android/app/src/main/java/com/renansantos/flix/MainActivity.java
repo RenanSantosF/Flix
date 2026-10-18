@@ -83,6 +83,8 @@ public final class MainActivity extends Activity {
     private boolean testWebAlwaysLimited;
     private final AtomicInteger testWebRequests=new AtomicInteger();
     private volatile long testWebFirstRequestAt,testWebSecondRequestAt;
+    private byte[] testMixedClip;
+    private final AtomicInteger testMixedHttps=new AtomicInteger(),testMixedHttp=new AtomicInteger(),testMixedScripts=new AtomicInteger();
     private boolean nativeWaitingNotice;
     private Runnable pendingRecovery;
     private String pendingToken="";
@@ -183,6 +185,13 @@ public final class MainActivity extends Activity {
                 if(!request.isForMainFrame()&&"GET".equals(request.getMethod())&&!requestGate.await(url,()->handler.post(()->{
                     if(!destroyed&&!contextKey.isEmpty()&&requestGate.ownsRetry(url))diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · repetição do provedor aguardando Retry-After no WebView · "+browserDiagnostics.summary(""));
                 })))return new WebResourceResponse("text/plain","UTF-8",429,"Too Many Requests",Collections.singletonMap("X-Flix-Local-Cooldown","1"),new ByteArrayInputStream(new byte[0]));
+                if(selfTest()&&testMixedClip!=null&&"media.flix-fixture.example".equals(request.getUrl().getHost())){
+                    if("/movie.mp4".equals(request.getUrl().getPath())){
+                        if("https".equals(request.getUrl().getScheme()))testMixedHttps.incrementAndGet();else testMixedHttp.incrementAndGet();
+                        return new WebResourceResponse("video/mp4",null,new ByteArrayInputStream(testMixedClip));
+                    }
+                    if("/active.js".equals(request.getUrl().getPath())){testMixedScripts.incrementAndGet();return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream("window.insecureScriptRan=true;".getBytes(StandardCharsets.UTF_8)));}
+                }
                 if(selfTest()&&testBootstrap!=null&&"https://asiafilm.org/flix-player-test.js".equals(url))
                     return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream(testBootstrap.getBytes(StandardCharsets.UTF_8)));
                 if(selfTest()&&testManifest!=null&&(NavigationPolicy.HOME+"test-stream.m3u8").equals(url))
@@ -235,7 +244,7 @@ public final class MainActivity extends Activity {
         // Async provider flows also receive the same offline popup sink. No new window is displayed.
         settings.setSupportMultipleWindows(true); settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         settings.setMediaPlaybackRequiresUserGesture(true);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(browser, true);
@@ -609,6 +618,8 @@ public final class MainActivity extends Activity {
     void nativeSharedRateClip(byte[] clip){if(!selfTest())throw new IllegalStateException("Debug fixture only");nativeTestSource=nativePlayback.sharedRateFixture(clip,testSharedNativePulls);}
     int browserPullCount(){return testBrowserPulls.get();}int browserLimitCount(){return testBrowserLimits.get();}int sharedNativePullCount(){return testSharedNativePulls.get();}
     void testWebRetryClip(byte[] clip,boolean alwaysLimited){if(!selfTest())throw new IllegalStateException("Debug fixture only");testWebClip=clip;testWebAlwaysLimited=alwaysLimited;}
+    void testMixedClip(byte[] clip){if(!selfTest())throw new IllegalStateException("Debug fixture only");testMixedClip=clip;}
+    int testMixedHttpsCount(){return testMixedHttps.get();}int testMixedHttpCount(){return testMixedHttp.get();}int testMixedScriptCount(){return testMixedScripts.get();}
     int testWebRetryCount(){return testWebRequests.get();}
     int testHeldRequests(){return requestGate.held();}
     long testWebRetryInterval(){return testWebSecondRequestAt-testWebFirstRequestAt;}

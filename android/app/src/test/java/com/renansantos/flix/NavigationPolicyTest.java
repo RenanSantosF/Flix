@@ -9,6 +9,8 @@ public class NavigationPolicyTest {
     @Test public void videoAndVerificationSubframesRemainPossible() {
         assertTrue(NavigationPolicy.canLoadSubframe("https://superflixapi.fun/filme/603"));
         assertTrue(NavigationPolicy.canLoadSubframe("https://challenges.cloudflare.com/widget"));
+        assertTrue(NavigationPolicy.canLoadSubframe("about:srcdoc"));
+        assertFalse(NavigationPolicy.canLoadSubframe("about:config"));
         assertTrue(NavigationPolicy.canLoadSubframe("blob:https://superflixapi.fun/test"));
         assertFalse(NavigationPolicy.canLoadSubframe("intent://external-app"));
         assertFalse(NavigationPolicy.canLoadSubframe("market://details?id=ad"));
