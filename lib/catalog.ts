@@ -23,7 +23,7 @@ export async function tmdb(path: string) {
   if (!token) return null;
   try {
     const response=await fetch(`https://api.themoviedb.org/3/${path}${path.includes('?')?'&':'?'}language=pt-BR`,
-      {headers:{Authorization:`Bearer ${token}`},next:{revalidate:900}});
+      {headers:{Authorization:`Bearer ${token}`},next:{revalidate:900},signal:AbortSignal.timeout(8000)});
     return response.ok ? await response.json() : null;
   } catch { return null; }
 }

@@ -162,6 +162,7 @@
           if (!video) return;
           if(data.type==='fullscreen-ui' && typeof data.active==='boolean'){
             if(data.active)nativeFullscreenVideo=video;else if(nativeFullscreenVideo===video)nativeFullscreenVideo=null;
+            if(win.__flixPlayerIdentity)win.__flixPlayerIdentity.fullscreen(video,data.active);
             fullscreenUi();send(video,'fullscreen-sync');
           } else if (data.type === 'cast-source' && typeof data.token==='string' && data.token.length<=64) {
             var selected=mediaSource(video),assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'',saved=castSources.get(video);

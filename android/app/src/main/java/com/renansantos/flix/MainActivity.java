@@ -291,6 +291,11 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
             while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
             observerScript = bytes.toString("UTF-8");
         } catch (Exception ignored) { return; }
+        try (InputStream input = getAssets().open("player-identity.js")) {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(); byte[] buffer = new byte[4096]; int count;
+            while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
+            observerScript = bytes.toString("UTF-8") + "\n" + observerScript;
+        } catch (Exception ignored) { /* Media reporting remains available without the theme. */ }
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return;
         // Only our top-level origin can request PiP or select a watch session.
         WebViewCompat.addWebMessageListener(browser, "FlixControl", Collections.singleton("https://" + NavigationPolicy.APP_HOST), (view, message, sourceOrigin, mainFrame, reply) -> {
