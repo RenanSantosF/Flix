@@ -125,6 +125,9 @@ public class PopupBlockingTest {
             tapInline(scenario,".main");waitForJs(scenario,"document.querySelector('video').paused");
             js(scenario,"var s=document.querySelector('[data-flix-inline-ui]').shadowRoot.querySelector('input');s.value=500;s.dispatchEvent(new Event('input'));s.dispatchEvent(new Event('change'));true");
             waitForJs(scenario,"document.querySelector('video').currentTime>.5 && document.querySelector('video').paused");saveScreenshot("Flix-player-identidade.png");
+            js(scenario,"document.querySelector('.fluid_video_wrapper').style.height='180px';window.__flixPlayerIdentity.scan();true");
+            waitForJs(scenario,"(function(){var s=document.querySelector('[data-flix-inline-ui]').shadowRoot;return s.querySelector('.main').getBoundingClientRect().bottom<s.querySelector('input').getBoundingClientRect().top})()");saveScreenshot("Flix-player-compacto.png");
+            js(scenario,"document.querySelector('.fluid_video_wrapper').style.height='320px';window.__flixPlayerIdentity.scan();true");
             tapInline(scenario,".full");waitForJs(scenario,"!!document.fullscreenElement && getComputedStyle(document.querySelector('[data-flix-inline-ui]')).display==='none' && getComputedStyle(document.querySelector('.fluid_controls_container')).display==='none' && !document.querySelector('video').controls");
             scenario.onActivity(a->{assertNotNull(a.fullscreenControls());a.onBackPressed();});
             waitForJs(scenario,"!document.fullscreenElement && getComputedStyle(document.querySelector('[data-flix-inline-ui]')).display!=='none' && getComputedStyle(document.querySelector('.fluid_controls_container')).display==='none'");
