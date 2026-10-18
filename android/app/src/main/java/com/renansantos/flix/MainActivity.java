@@ -350,7 +350,7 @@ public final class MainActivity extends Activity {
                     reply.postMessage(restore.toString());
                     return;
                 }
-                playbackActive = playing;if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
+                playbackActive = playing;if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
