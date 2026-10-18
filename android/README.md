@@ -1,5 +1,31 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.16: compara e corrige o comportamento de conteúdo misto do WebView.
+A versão anterior usava MIXED_CONTENT_NEVER_ALLOW; o teste sem bloqueios 0.14
+usava ALWAYS_ALLOW. A nova configuração usa COMPATIBILITY_MODE, que permite
+mídia passiva compatível com o navegador e mantém scripts/frames HTTP ativos
+bloqueados. Quando o motor ativa WebViewMixedContentAutoupgrades, esse é o
+modo que permite atualizar HTTP -> HTTPS; isso depende do WebView, não é uma
+garantia do aplicativo. TLS, user-agent estável, cookies e contenção de pop-ups
+são mantidos. about:srcdoc passa a ser aceito como about:blank, conforme a
+integração WebView documentada pela Cloudflare.
+
+O teste instrumentado compara o modo anterior com a configuração publicada:
+um vídeo atribuído via HTTP falha sem conexão no NEVER_ALLOW, enquanto o
+modo compatível solicita a mídia e reproduz H.264 real. O fixture aceita os
+dois protocolos para não presumir uma flag do motor. Um script HTTP ativo
+continua bloqueado e não recebe requisição. Isso comprova uma diferença do
+app; ainda não demonstra que o bloqueio observado no provedor real era o
+mesmo recurso. Pop-ups, PiP, retomada e recuperação 429 continuam cobertos.
+
+O diagnóstico distingue atualização HTTPS de bloqueio HTTP e mostra tipo e
+host do recurso bloqueado. CSP mostra diretiva/host quando presentes; avisos
+Report-Only não são tratados como bloqueio. Somente 401 do caminho PAT da
+Cloudflare e falhas DNS -2 de subdomínios de prova documentados vão para a
+seção auxiliar; erros no domínio principal e outras respostas continuam
+visíveis. Essas provas podem falhar durante uma verificação bem-sucedida.
+Não são copiados URLs, caminhos, queries, tokens, cookies ou console bruto.
+
 Versão 0.15: remove o checkbox e o modo sem bloqueios, pois a comparação no
 aparelho também recebeu HTTP 429. A proteção de pop-ups volta a ser permanente.
 

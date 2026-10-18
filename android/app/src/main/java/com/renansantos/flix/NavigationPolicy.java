@@ -45,7 +45,7 @@ final class NavigationPolicy {
             URI uri = URI.create(value);
             String scheme = uri.getScheme();
             return "https".equalsIgnoreCase(scheme)
-                || "about:blank".equals(value) || "blob".equalsIgnoreCase(scheme) || "data".equalsIgnoreCase(scheme);
+                || "about:blank".equals(value) || "about:srcdoc".equals(value) || "blob".equalsIgnoreCase(scheme) || "data".equalsIgnoreCase(scheme);
         } catch (RuntimeException e) { return false; }
     }
 }

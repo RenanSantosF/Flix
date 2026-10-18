@@ -81,6 +81,23 @@ public class PopupBlockingTest {
         assertTrue("Expected block counter >= " + minimum, count(scenario, popup) >= minimum);
     }
 
+    @Test public void browserCompatibleModePlaysPassiveVideoButStillBlocksActiveHttpScripts() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            byte[] clip=recoveryClip();
+            scenario.onActivity(a->{assertEquals(android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE,a.testBrowser().getSettings().getMixedContentMode());a.testMixedClip(clip);a.testBrowser().getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);});
+            String fixture="<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"var v=document.querySelector('video');v.src='http://media.flix-fixture.example/movie.mp4';v.play().catch(function(){});var s=document.createElement('script');s.src='http://media.flix-fixture.example/active.js';document.head.appendChild(s);\">Assistir</button><video muted playsinline controls></video>";
+            load(scenario,fixture);tap(scenario,50,32);
+            waitForJs(scenario,"!!document.querySelector('video').error || document.querySelector('video').networkState===3");
+            scenario.onActivity(a->{assertEquals(0,a.testMixedHttpsCount());assertEquals(0,a.testMixedHttpCount());a.testBrowser().getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);});
+            load(scenario,fixture);waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,50,32);
+            waitForJs(scenario,"document.querySelector('video').readyState>=3 && document.querySelector('video').currentTime>0.2");
+            scenario.onActivity(a->{assertTrue(a.testMixedHttpsCount()+a.testMixedHttpCount()>0);assertEquals(0,a.testMixedScriptCount());assertEquals(0,a.nativeOpenCount());});
+            assertEquals("undefined",js(scenario,"typeof window.insecureScriptRan").replace("\"",""));
+            saveScreenshot("Flix-video-compativel.png");
+        }
+    }
+
     @Test public void blocksGesturePopupsFromMainDocumentAndIframe() throws Exception {
         try (ActivityScenario<MainActivity> scenario = launch()) {
             load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"window.open('https://asiafilm.org/ad','_blank')\">Main popup</button><iframe style='position:absolute;left:0;top:100px;width:100%;height:80px;border:0' srcdoc=\"<meta name='viewport' content='width=device-width,initial-scale=1'><body style='margin:0'><button style='width:100%;height:64px' onclick=&quot;window.open('https://linkonclick.com/ad','_blank')&quot;>Iframe popup</button>\"></iframe>");
