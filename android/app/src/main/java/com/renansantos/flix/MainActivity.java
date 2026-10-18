@@ -197,7 +197,7 @@ public final class MainActivity extends Activity {
                 return null;
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
-                if(response.getResponseHeaders()!=null&&"1".equals(response.getResponseHeaders().get("X-Flix-Local-Cooldown")))return;
+                if(response.getResponseHeaders()!=null)for(java.util.Map.Entry<String,String> header:response.getResponseHeaders().entrySet())if("X-Flix-Local-Cooldown".equalsIgnoreCase(header.getKey())&&"1".equals(header.getValue()))return;
                 if(!contextKey.isEmpty())browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode(),requestDestination(request),response.getMimeType());
                 if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl())) {
                     MediaRateLimit.Deadline deadline=nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
