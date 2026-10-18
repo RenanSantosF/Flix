@@ -21,7 +21,7 @@ function fixture(){
   document:{addEventListener:(name,callback)=>{listeners[name]=callback},querySelectorAll:s=>s==='video'?videos:labels},
   setInterval:callback=>{scan=callback},setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{at:time+delay,fn});return id},clearTimeout:id=>timers.delete(id),addEventListener(){}};
  vm.runInNewContext(observerScript,{window:win,Date:class extends Date{static now(){return time}}});
- return {video,videos,messages,label:(text,visible=true)=>labels.push({textContent:text,getClientRects:()=>visible?[{}]:[]}),clearLabels:()=>{labels.length=0},error:(settle=true)=>{video.error={code:4};listeners.error({target:video});if(settle)advance(5000)},
+ return {video,videos,messages,label:(text,visible=true)=>{const label={textContent:text,getClientRects:()=>visible?[{}]:[]};labels.push(label);return label},style:fn=>{win.getComputedStyle=fn},clearLabels:()=>{labels.length=0},error:(settle=true)=>{video.error={code:4};listeners.error({target:video});if(settle)advance(5000)},
   resource:(url,initiatorType='fetch',startTime=time)=>{const entry={name:url,initiatorType,startTime};resources.push(entry);resourceObserver({getEntries:()=>[entry]})},
   scan:()=>scan(),advance,emit:name=>listeners[name]?.({target:video})};
 }
@@ -117,4 +117,11 @@ test('a hidden ad label or unrelated text does not suppress a real movie failure
 test('Loading ad can be reported before the provider creates its video element',()=>{
  const f=fixture();f.videos.length=0;f.label('Loading ad...');f.advance(3000);f.scan();
  assert.equal(f.messages.at(-1).adLoading,true);assert.equal(f.messages.at(-1).readyState,-1);assert.equal(f.messages.at(-1).sourceKind,'missing');
+});
+
+
+test('an ad label hidden by an ancestor does not suppress the movie',()=>{
+ const f=fixture(),label=f.label('Loading ad'),parent={};label.parentElement=parent;
+ f.style(node=>({visibility:'visible',display:'block',opacity:node===parent?'0':'1'}));
+ f.video.src='https://cdn.example/movie.mp4';f.error();assert.equal(f.messages.at(-1).source,f.video.src);
 });

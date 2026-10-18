@@ -80,7 +80,12 @@
           for(var i=0;i<Math.min(labels.length,24);i++) {
             var label=labels[i],text=String(label.textContent||'').trim();
             if(text.length>64||!/^loading\s+ad(?:vertisement)?[.\s…]*$/i.test(text))continue;
-            if(label.getClientRects().length && (!win.getComputedStyle || win.getComputedStyle(label).visibility!=='hidden'))return true;
+            var visible=label.getClientRects().length>0,node=label;
+            for(var depth=0;visible&&win.getComputedStyle&&node&&depth<10;depth++,node=node.parentElement) {
+              var style=win.getComputedStyle(node);
+              if(style.display==='none'||style.visibility==='hidden'||style.opacity==='0')visible=false;
+            }
+            if(visible)return true;
           }
         } catch(_) {}
         return false;
