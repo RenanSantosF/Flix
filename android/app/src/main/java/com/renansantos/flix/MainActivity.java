@@ -59,7 +59,9 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     private WebChromeClient.CustomViewCallback customViewCallback;
     private String lastAppUrl = NavigationPolicy.HOME, contextKey = "", activeVideo = "";
     private int contextSeason = 1, contextEpisode = 1;
-    private double resumePosition;
+    private double resumePosition,lastPosition,lastDuration;
+    private JavaScriptReplyProxy fullscreenReply;
+    private String fullscreenVideo="";
     private boolean playbackActive, documentStartObserver, destroyed, enteringPip, foreground;
     private JavaScriptReplyProxy activeReply;
     private NativePlayback nativePlayback;
@@ -183,6 +185,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                     public void cast(){openCast();}
                     public void seekTo(double seconds){seekVideoTo(seconds);}
                 });
+                fullscreenPlayer.playing(playbackActive);fullscreenPlayer.progress(lastPosition,lastDuration);syncFullscreenOwner();
                 root.addView(fullscreenPlayer, new FrameLayout.LayoutParams(-1, -1));
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
                 updatePipParams();
@@ -402,7 +405,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                     reply.postMessage(restore.toString());
                     return;
                 }
-                playbackActive = playing;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);}if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
+                lastPosition=position;lastDuration=duration;playbackActive = playing;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);syncFullscreenOwner();}if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
@@ -499,7 +502,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         },stallDelayMs);
     }
     private void clearPlaybackContext() {
-        castToken="";if(cast!=null)cast.clear();cancelWebRetry();browserRetry.clear();requestGate.clear();providerStopped=false;contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
+        restoreProviderControls();lastPosition=0;lastDuration=0;castToken="";if(cast!=null)cast.clear();cancelWebRetry();browserRetry.clear();requestGate.clear();providerStopped=false;contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
         pendingRecovery=null;pendingToken="";
         if(nativePlayback!=null)nativePlayback.close(false);
         recoveredSources.clear(); recoveryFailures.clear(); nativeWaitingNotice=false; recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
@@ -609,8 +612,18 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     private void localVideoCommand(String type,int seconds){
         if(activeReply!=null&&!activeVideo.isEmpty())try{activeReply.postMessage(new JSONObject().put("type",type).put("videoId",activeVideo).put("seconds",seconds).toString());}catch(Exception ignored){}
     }
+    private void syncFullscreenOwner(){
+        if(fullscreenPlayer==null||activeReply==null||activeVideo.isEmpty()||fullscreenVideo.equals(activeVideo))return;
+        restoreProviderControls();fullscreenReply=activeReply;fullscreenVideo=activeVideo;
+        try{fullscreenReply.postMessage(new JSONObject().put("type","fullscreen-ui").put("videoId",fullscreenVideo).put("active",true).toString());}catch(Exception ignored){}
+    }
+    private void restoreProviderControls(){
+        if(fullscreenReply!=null)try{fullscreenReply.postMessage(new JSONObject().put("type","fullscreen-ui").put("videoId",fullscreenVideo).put("active",false).toString());}catch(Exception ignored){}
+        fullscreenReply=null;fullscreenVideo="";
+    }
     private void exitFullscreen() {
         if (customView == null) return;
+        restoreProviderControls();
         if(fullscreenPlayer!=null){fullscreenPlayer.release();root.removeView(fullscreenPlayer);fullscreenPlayer=null;}customView = null; normal.setVisibility(View.VISIBLE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE); root.requestApplyInsets(); updatePipParams();
         if (customViewCallback != null) { customViewCallback.onCustomViewHidden(); customViewCallback = null; }
