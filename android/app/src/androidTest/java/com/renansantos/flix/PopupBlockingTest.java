@@ -136,6 +136,8 @@ public class PopupBlockingTest {
     }
     private void tapInline(ActivityScenario<MainActivity> scenario,String selector) throws Exception {
         js(scenario,"document.querySelector('[data-flix-inline-ui]').shadowRoot.querySelector('.surface').click();true");
+        if(".main".equals(selector))saveScreenshot("Flix-player-antes-toque.png");
+        assertEquals("Inline button must own its hit area", "true",js(scenario,"(function(){var host=document.querySelector('[data-flix-inline-ui]'),s=host.shadowRoot,b=s.querySelector("+org.json.JSONObject.quote(selector)+"),r=b.getBoundingClientRect(),hit=s.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&(hit===b||b.contains(hit));})()"));
         org.json.JSONArray xy=new org.json.JSONArray(js(scenario,"(function(){var r=document.querySelector('[data-flix-inline-ui]').shadowRoot.querySelector("+org.json.JSONObject.quote(selector)+").getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));
         tap(scenario,xy.getInt(0),xy.getInt(1));
     }
