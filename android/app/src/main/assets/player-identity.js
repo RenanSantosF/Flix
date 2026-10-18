@@ -96,7 +96,8 @@
         mountStyle();themeServers();
         players.forEach(function(player,video){if(!video.isConnected){player.remove();players.delete(video);}else player.refresh();});
         doc.querySelectorAll('video').forEach(function(video){
-          if(players.has(video)||video.readyState<2||video.error)return;
+          // Let the provider's original first-play/ad preparation run before taking control.
+          if(players.has(video)||video.readyState<3||video.paused||video.currentTime<=.1||video.error)return;
           var scope=video.closest('.fluid_video_wrapper,.jwplayer,.plyr,.video-js');
           if(!scope||scope.querySelectorAll('video').length!==1||adVisible(scope))return;
           var player=create(video,scope);if(player){players.set(video,player);player.refresh();}
@@ -105,6 +106,8 @@
       win.__flixPlayerIdentity={scan:scan,fullscreen:function(video,active){if(active)fullscreen.add(video);else fullscreen.delete(video);var player=players.get(video);if(player)player.refresh();}};
       doc.addEventListener('fullscreenchange',scan);doc.addEventListener('webkitfullscreenchange',scan);
       doc.addEventListener('loadedmetadata',scan,true);doc.addEventListener('canplay',scan,true);
+      doc.addEventListener('timeupdate',function(event){if(!players.has(event.target))scan();},true);
+      ['loadstart','emptied'].forEach(function(name){doc.addEventListener(name,function(event){var player=players.get(event.target);if(player){player.remove();players.delete(event.target);}},true);});
       win.setInterval(scan,1000);scan();
     }catch(_){}
   }

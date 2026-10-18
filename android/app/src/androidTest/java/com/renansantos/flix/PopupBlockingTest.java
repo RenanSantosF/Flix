@@ -120,6 +120,7 @@ public class PopupBlockingTest {
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");
             org.json.JSONArray alternate=new org.json.JSONArray(js(scenario,"(function(){var r=document.querySelector('#alternate').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));tap(scenario,alternate.getInt(0),alternate.getInt(1));
             waitForJs(scenario,"window.alternateClicks===1");saveScreenshot("Flix-servidores-identidade.png");
+            waitForJs(scenario,"document.querySelector('video').readyState>=2 && document.querySelector('video').paused && !document.querySelector('[data-flix-inline-ui]')");
             org.json.JSONArray primary=new org.json.JSONArray(js(scenario,"(function(){var r=document.querySelector('#primary').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));tap(scenario,primary.getInt(0),primary.getInt(1));
             waitForJs(scenario,"window.primaryClicks===1 && document.querySelector('video').currentTime>.2 && !!document.querySelector('[data-flix-inline-ui]') && getComputedStyle(document.querySelector('.fluid_controls_container')).display==='none' && !document.querySelector('video').controls");
             tapInline(scenario,".main");waitForJs(scenario,"document.querySelector('video').paused");
