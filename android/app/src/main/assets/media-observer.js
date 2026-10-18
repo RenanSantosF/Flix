@@ -8,7 +8,7 @@
       win.__flixMediaObserver = true;
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
       var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
-      var recoveryDelay = 5000, lastAdTime = 0;
+      var recoveryDelay = 5000, lastAdTime = 0, castSources = new WeakMap();
       var wantedPlayback = new WeakMap(), browserRetried = new WeakSet(), startedVideos = new WeakSet();
       function retryWanted(video) { return !startedVideos.has(video)&&(wantedPlayback.get(video)===true||!video.paused); }
       function identity(video) {
@@ -111,7 +111,11 @@
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
         if (loadingAdVisible()) {cancelRecovery(video);reportState(video);return;}
-        if(video.readyState>=3&&(video.currentTime>0.1||event==='playing'))startedVideos.add(video);
+        if(video.readyState>=3&&(video.currentTime>0.1||event==='playing')){
+          startedVideos.add(video);
+          var castCandidate=mediaSource(video);
+          if(castCandidate.source)castSources.set(video,{signature:video.currentSrc||video.src||'',source:castCandidate.source,sourceType:castCandidate.sourceType});
+        }
         if (!error && video.readyState < 3) reportState(video);
         if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
         // Give the provider's own error handlers time to replace a temporary source.
@@ -137,7 +141,8 @@
           var data = JSON.parse(event.data), video = videos[data.videoId];
           if (!video) return;
           if (data.type === 'cast-source' && typeof data.token==='string' && data.token.length<=64) {
-            var selected=mediaSource(video),assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'';
+            var selected=mediaSource(video),assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'',saved=castSources.get(video);
+            if(!selected.source&&saved&&saved.signature===(video.currentSrc||video.src||''))selected=saved;
             if(/^http:\/\//i.test(assigned))selected={source:assigned,sourceType:(video.querySelector('source[src]')||{}).type||''};
             if(loadingAdVisible()||video.readyState<2)selected={source:'',sourceType:''};
             win.FlixMedia.postMessage(JSON.stringify({event:'cast-source',token:data.token,videoId:identity(video),source:selected.source,sourceType:selected.sourceType,position:video.currentTime||0,duration:isFinite(video.duration)?video.duration:0}));
@@ -165,7 +170,7 @@
             if(event==='ended'||(event==='pause'&&!source.error&&source.networkState!==win.HTMLMediaElement.NETWORK_NO_SOURCE))wantedPlayback.set(source,false);
           }
           if (event === 'emptied' || event === 'loadstart') {
-            if (source instanceof win.HTMLVideoElement) { cancelRecovery(source); failedVideos.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
+            if (source instanceof win.HTMLVideoElement) { cancelRecovery(source); failedVideos.delete(source); castSources.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
             return;
           }
           if ((event === 'loadedmetadata' || event === 'playing' || event === 'ended') && source instanceof win.HTMLVideoElement) cancelRecovery(source);

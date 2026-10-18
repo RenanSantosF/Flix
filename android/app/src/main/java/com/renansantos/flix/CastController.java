@@ -52,7 +52,7 @@ final class CastController implements SessionManagerListener<CastSession> {
         sent=candidate.url;owned=true;accepted=false;
         client.load(new MediaLoadRequestData.Builder().setMediaInfo(info.build()).setCurrentTime(candidate.position).setAutoplay(true).build()).setResultCallback(result->{
             if(dead||media!=candidate||!key.equals(contextKey))return;
-            if(!result.getStatus().isSuccess()){owned=false;listener.message("A TV recusou esta fonte. Tente outro servidor; a reprodução no celular continua disponível.");}else update();
+            if(!result.getStatus().isSuccess()){owned=false;listener.message("A TV recusou esta fonte (código "+result.getStatus().getStatusCode()+"). Tente outro servidor; a reprodução no celular continua disponível.");}else update();
         });
     }
     private void update(){

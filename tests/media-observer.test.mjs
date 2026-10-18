@@ -173,3 +173,9 @@ test('cast source is returned only on explicit request for the addressed playabl
  f.command({type:'cast-source',videoId,token:'one'});const reply=f.messages.at(-1);assert.equal(reply.event,'cast-source');assert.equal(reply.source,f.video.src);assert.equal(reply.position,123);assert.equal(reply.token,'one');assert.equal(f.video.loads,0);assert.equal(f.video.plays,0);
  f.label('Loading ad');f.command({type:'cast-source',videoId,token:'two'});assert.equal(f.messages.at(-1).source,'');
 });
+
+test('a playing blob retains its observed manifest for later cast and discards it on a new load',()=>{
+ const f=fixture();f.video.src='blob:https://player.example/movie';f.resource('https://cdn.example/main.m3u8');f.video.duration=7200;f.video.readyState=4;f.video.currentTime=3;f.video.paused=false;f.emit('playing');const videoId=f.messages.at(-1).videoId;
+ f.advance(90000);f.resource('https://cdn.example/segment.ts');f.command({type:'cast-source',videoId,token:'later'});assert.equal(f.messages.at(-1).source,'https://cdn.example/main.m3u8');
+ f.emit('loadstart');f.command({type:'cast-source',videoId,token:'new'});assert.equal(f.messages.at(-1).source,'');
+});
