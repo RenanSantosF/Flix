@@ -4,10 +4,12 @@ import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
 const observerScript=readFileSync(new URL('../android/app/src/main/assets/media-observer.js',import.meta.url),'utf8');
 function fixture(){
- let time=1000, resources=[], resourceObserver, scan;
+ let time=1000, resources=[], resourceObserver, scan, nextTimer=0;
+ const timers=new Map();
+ function advance(ms){const until=time+ms;for(;;){const due=[...timers].filter(([,v])=>v.at<=until).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;time=due[1].at;timers.delete(due[0]);due[1].fn();}time=until;}
  const messages=[], listeners={};
  class Video{
-  currentSrc='';src='';duration=NaN;currentTime=0;paused=true;ended=false;error=null;children=[];
+  currentSrc='';src='';readyState=0;duration=NaN;currentTime=0;paused=true;ended=false;error=null;children=[];
   querySelector(){return this.children[0]||null}querySelectorAll(){return this.children}
  }
  const video=new Video(), videos=[video];
@@ -17,11 +19,11 @@ function fixture(){
   location:{href:'https://player.example/embed/123?token=private#play'},
   FlixMedia:{postMessage:m=>messages.push(JSON.parse(m))},
   document:{addEventListener:(name,callback)=>{listeners[name]=callback},querySelectorAll:s=>s==='video'?videos:[]},
-  setInterval:callback=>{scan=callback},setTimeout:callback=>callback(),addEventListener(){}};
+  setInterval:callback=>{scan=callback},setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{at:time+delay,fn});return id},clearTimeout:id=>timers.delete(id),addEventListener(){}};
  vm.runInNewContext(observerScript,{window:win,Date:class extends Date{static now(){return time}}});
- return {video,videos,messages,error:()=>{video.error={code:4};listeners.error({target:video})},
+ return {video,videos,messages,error:(settle=true)=>{video.error={code:4};listeners.error({target:video});if(settle)advance(5000)},
   resource:(url,initiatorType='fetch',startTime=time)=>{const entry={name:url,initiatorType,startTime};resources.push(entry);resourceObserver({getEntries:()=>[entry]})},
-  scan:()=>scan(),advance:ms=>{time+=ms},emit:name=>listeners[name]?.({target:video})};
+  scan:()=>scan(),advance,emit:name=>listeners[name]?.({target:video})};
 }
 test('direct sources reach the local bridge on error 4 only',()=>{
  const f=fixture();f.video.src='https://cdn.example/video.mp4?token=private';f.video.duration=60;f.emit('loadedmetadata');
@@ -59,4 +61,29 @@ test('a new video load does not reuse the previous video manifest',()=>{
 test('recovery includes declared page context only on an error, for the local decoder',()=>{
  const f=fixture();f.video.src='https://cdn.example/v.mp4';f.video.duration=60;f.video.hasAttribute=()=>true;f.video.crossOrigin='anonymous';
  f.emit('playing');assert.equal(f.messages.at(-1).frameUrl,'');f.error();assert.equal(f.messages.at(-1).frameUrl,'https://player.example/embed/123?token=private#play');assert.equal(f.messages.at(-1).corsMode,'anonymous');
+});
+
+
+test('a transient failure does not interrupt the provider when its own recovery starts playback',()=>{
+ const f=fixture();f.video.src='https://cdn.example/temporary.mp4';f.error(false);
+ assert.equal(f.messages.length,0);f.advance(1000);
+ f.video.src='https://cdn.example/working.mp4';f.video.error=null;f.emit('loadstart');
+ f.video.duration=60;f.video.readyState=4;f.video.paused=false;f.emit('loadedmetadata');f.emit('playing');f.advance(6000);
+ assert.ok(f.messages.some(m=>m.playing));assert.equal(f.messages.filter(m=>m.error).length,0);
+});
+test('stable unsupported media gets one fallback only after the full recovery window',()=>{
+ const f=fixture();f.video.src='https://cdn.example/broken.mp4';f.error(false);f.advance(4000);f.scan();
+ assert.equal(f.messages.length,0);f.advance(999);assert.equal(f.messages.length,0);f.advance(1);
+ assert.equal(f.messages.length,1);assert.equal(f.messages[0].source,f.video.src);f.scan();assert.equal(f.messages.length,1);
+});
+test('loading a replacement cancels the old fallback and gives the new source its own recovery window',()=>{
+ const f=fixture();f.video.src='https://cdn.example/first.mp4';f.error(false);f.advance(1000);
+ f.video.src='https://cdn.example/second.mp4';f.emit('loadstart');f.error(false);f.advance(4000);assert.equal(f.messages.length,0);
+ f.advance(1000);assert.equal(f.messages.length,1);assert.equal(f.messages[0].source,'https://cdn.example/second.mp4');
+});
+
+
+test('a removed failed video cannot transfer its obsolete source to the native player',()=>{
+ const f=fixture();f.video.src='https://cdn.example/obsolete.mp4';f.error(false);f.video.isConnected=false;
+ f.advance(6000);assert.equal(f.messages.length,0);
 });
