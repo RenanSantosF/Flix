@@ -16,6 +16,7 @@ import android.util.Rational;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
+import android.webkit.ConsoleMessage;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -61,6 +62,9 @@ public final class MainActivity extends Activity {
     private boolean playbackActive, documentStartObserver, destroyed, enteringPip, foreground;
     private JavaScriptReplyProxy activeReply;
     private NativePlayback nativePlayback;
+    private final BrowserDiagnostics browserDiagnostics=new BrowserDiagnostics();
+    private int contextGeneration,stallGeneration,stallDelayMs=30000;
+    private boolean sessionStarted,stallNotice,stallArmed,terminalBrowserError;
     private androidx.media3.datasource.DataSource.Factory nativeTestSource;
     private final HashSet<String> recoveredSources = new HashSet<>();
     private String recoverySource = "";
@@ -100,7 +104,7 @@ public final class MainActivity extends Activity {
         nativePlayback = new NativePlayback(this, root, this::enterPlayerPip, new NativePlayback.Listener() {
             @Override public void progress(double position,double duration,boolean playing,boolean ended) {
                 if(contextKey.isEmpty()||destroyed)return;
-                playbackActive=playing;root.setKeepScreenOn(playing);updatePipParams();
+                playbackActive=playing;if(playing){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}}root.setKeepScreenOn(playing);updatePipParams();
                 if(playing&&nativeWaitingNotice&&nativePlayback!=null&&!nativePlayback.isWaiting()){nativeWaitingNotice=false;notice("");diagnostic("");}
                 try {
                     JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode)
@@ -110,13 +114,17 @@ public final class MainActivity extends Activity {
             }
             @Override public void waiting(String message) {nativeWaitingNotice=true;notice(message);diagnostic(recoveryDiagnostic+" · "+message);}
             @Override public void failed(String message) {
-                String failure=recoveryDiagnostic + " · " + message;
+                String failure=recoveryDiagnostic + " · " + message + " · " + browserDiagnostics.summary(recoverySource);
                 if(!recoverySource.isEmpty())recoveryFailures.put(recoverySource,failure);
                 notice(message);diagnostic(failure);
             }
             @Override public void closed() { nativeSession(false);playbackActive=false;root.setKeepScreenOn(false);updatePipParams(); }
         });
         browser.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onConsoleMessage(ConsoleMessage message) {
+                if(!contextKey.isEmpty())browserDiagnostics.console(message.message());
+                return true; // Do not forward provider URLs/tokens from console messages to logcat.
+            }
             @Override public void onProgressChanged(WebView view, int value) {
                 progress.setProgress(value); progress.setVisibility(value == 100 || isInPictureInPictureMode() ? View.GONE : View.VISIBLE);
             }
@@ -153,7 +161,7 @@ public final class MainActivity extends Activity {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 boolean allowed = request.isForMainFrame() ? NavigationPolicy.isAppUrl(url) : NavigationPolicy.canLoadSubframe(url);
-                if (!allowed) noteBlockedNavigation();
+                if (!allowed) {noteBlockedNavigation();if(!request.isForMainFrame()&&!contextKey.isEmpty())browserDiagnostics.blockedFrame(request.getUrl().getScheme());}
                 return !allowed;
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -173,6 +181,7 @@ public final class MainActivity extends Activity {
                 return null;
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
+                if(!contextKey.isEmpty())browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode());
                 if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl()))
                     nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
             }
@@ -184,6 +193,7 @@ public final class MainActivity extends Activity {
                 if (!documentStartObserver && NavigationPolicy.isAppUrl(view.getUrl() == null ? "" : view.getUrl())) view.evaluateJavascript(observerScript, null);
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if(!contextKey.isEmpty())browserDiagnostics.network(error.getErrorCode());
                 if (request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); progress.setVisibility(View.GONE); }
             }
         });
@@ -247,6 +257,7 @@ public final class MainActivity extends Activity {
                     contextEpisode = Math.max(1, Math.min(10000, data.optInt("episode", 1)));
                     double position = data.optDouble("resume", 0);
                     resumePosition = !key.startsWith("live:") && Double.isFinite(position) ? Math.max(0, Math.min(604800, position)) : 0;
+                    scheduleStallDiagnostic(contextGeneration);
                 }
             } catch (Exception ignored) { }
         });
@@ -263,6 +274,10 @@ public final class MainActivity extends Activity {
                 double duration = data.optDouble("duration", 0), position = data.optDouble("position", 0);
                 if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || position < 0 || position > 1e12) return;
                 if(pendingRecovery!=null||(nativePlayback!=null&&nativePlayback.isOpen()))return;
+                if("state".equals(data.optString("event"))) {
+                    browserDiagnostics.state(data.optString("sourceKind"),data.optInt("readyState",-1),data.optInt("networkState",-1));
+                    terminalBrowserError=false;if(!stallArmed){sessionStarted=false;scheduleStallDiagnostic(contextGeneration);}return;
+                }
                 int error = data.optInt("error", 0);
                 String recoveryReason = "erro de reprodução";
                 if(error==4&&foreground&&(activeVideo.isEmpty()||activeVideo.equals(video))) {
@@ -294,8 +309,8 @@ public final class MainActivity extends Activity {
                     }
                 }
                 if (error >= 1 && error <= 4 && (activeVideo.isEmpty() || activeVideo.equals(video))) {
-                    playbackActive = false; root.setKeepScreenOn(false); updatePipParams();
-                    diagnostic(mediaDiagnostic(data, sourceOrigin.getHost(), recoveryReason));
+                    terminalBrowserError=true;playbackActive = false; root.setKeepScreenOn(false); updatePipParams();
+                    diagnostic(mediaDiagnostic(data, sourceOrigin.getHost(), recoveryReason)+" · "+browserDiagnostics.summary(data.optString("source")));
                     JSONObject failure = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode).put("error", error);
                     browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + failure + "}))", null);
                     return;
@@ -311,7 +326,7 @@ public final class MainActivity extends Activity {
                     reply.postMessage(restore.toString());
                     return;
                 }
-                playbackActive = playing; root.setKeepScreenOn(playing); updatePipParams();
+                playbackActive = playing;if(playing&&(position>0.1||"playing".equals(data.optString("event")))){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
@@ -345,7 +360,18 @@ public final class MainActivity extends Activity {
             recoveryFailures.put(recoverySource,recoveryDiagnostic+" · transferência não confirmada");notice(message);diagnostic(recoveryFailures.get(recoverySource));
         }},3000);
     }
+    private void scheduleStallDiagnostic(int generation) {
+        stallArmed=true;int attempt=++stallGeneration;
+        handler.postDelayed(()->{
+            if(destroyed||!foreground||contextGeneration!=generation||stallGeneration!=attempt||terminalBrowserError||contextKey.isEmpty()||sessionStarted||stallNotice||pendingRecovery!=null||nativePlayback.isOpen()||!recoveryFailures.isEmpty())return;
+            android.content.pm.PackageInfo engine=WebView.getCurrentWebViewPackage();
+            String text="Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · WebView "+(engine==null?"?":engine.versionName)
+                +" · sem reprodução após 30 s · "+browserDiagnostics.summary("");
+            stallNotice=true;notice("O player ainda não iniciou o vídeo. Copie os detalhes da reprodução abaixo para verificar a causa.");diagnostic(text);
+        },stallDelayMs);
+    }
     private void clearPlaybackContext() {
+        contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
         pendingRecovery=null;pendingToken="";
         if(nativePlayback!=null)nativePlayback.close(false);
         recoveredSources.clear(); recoveryFailures.clear(); nativeWaitingNotice=false; recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
@@ -491,6 +517,7 @@ public final class MainActivity extends Activity {
     void testChildHtml(String html){if(!selfTest())throw new IllegalStateException("Debug fixture only");testChildHtml=html;}
     void nativeSharedRateClip(byte[] clip){if(!selfTest())throw new IllegalStateException("Debug fixture only");nativeTestSource=nativePlayback.sharedRateFixture(clip,testSharedNativePulls);}
     int browserPullCount(){return testBrowserPulls.get();}int browserLimitCount(){return testBrowserLimits.get();}int sharedNativePullCount(){return testSharedNativePulls.get();}
+    void testStallDelay(int millis){if(!selfTest())throw new IllegalStateException("Debug fixture only");stallDelayMs=millis;}
     int nativeOpenCount(){return testNativeOpens;}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}

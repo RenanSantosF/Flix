@@ -87,3 +87,12 @@ test('a removed failed video cannot transfer its obsolete source to the native p
  const f=fixture();f.video.src='https://cdn.example/obsolete.mp4';f.error(false);f.video.isConnected=false;
  f.advance(6000);assert.equal(f.messages.length,0);
 });
+
+
+test('an unready video reports bounded state without exposing its source URL or querying media',()=>{
+ const f=fixture();f.video.src='https://cdn.example/private?token=secret';f.video.readyState=0;f.video.networkState=2;
+ f.advance(3000);f.scan();const state=f.messages.at(-1);
+ assert.equal(state.event,'state');assert.equal(state.sourceKind,'https');assert.equal(state.readyState,0);assert.equal(state.networkState,2);
+ assert.equal(JSON.stringify(state).includes('secret'),false);assert.equal(JSON.stringify(state).includes('cdn.example'),false);
+ const count=f.messages.length;f.scan();assert.equal(f.messages.length,count);
+});

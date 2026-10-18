@@ -1,5 +1,23 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.11 (diagnóstico): registra o estágio anterior ao motor nativo. O APK
+mostra após 30 s sem início de reprodução o estado readyState/networkState
+informado pelo vídeo, categorias de erros de console (HTTP misto, CORS, CSP,
+interação, JavaScript) e erros de rede do WebView. HTTP de erro é associado à
+fonte exata apenas em memória; o diagnóstico inclui o status, nunca a URL.
+As categorias descrevem sinais observados, sem afirmar que são a causa.
+
+O watchdog não recarrega, não inicia reprodução e não faz pedidos de rede.
+Uma reprodução iniciada cancela o aviso; uma nova carga pode ser observada.
+Contexto alterado invalida o timer. Recuperação nativa ativa ou falha definitiva
+mantêm seu diagnóstico. No máximo 32 URLs de erro são retidas em memória por
+contexto e cinco categorias aparecem. Não há gravação/exportação de HTML,
+cookies, caminhos, queries, tokens ou mensagens brutas do console. O texto
+copiado pelo site aceita até 1200 caracteres para não cortar essa evidência.
+
+Esta versão não é apresentada como correção do servidor alternativo: o teste
+real no aparelho ainda é necessário para obter seu erro anterior ao fallback.
+
 Versão 0.10: um erro 4 não entrega mais a fonte imediatamente ao motor nativo.
 O observador aguarda cinco segundos de falha estável, deixando os handlers do
 próprio player trocar uma fonte temporária ou retomar o carregamento. Uma nova

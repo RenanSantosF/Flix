@@ -6,7 +6,7 @@
       if (win.__flixMediaObserver || !win.FlixMedia) return;
       win.__flixMediaObserver = true;
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
-      var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap();
+      var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
       var recoveryDelay = 5000;
       var prefix = Math.random().toString(36).slice(2) + ':';
       // Resource Timing describes requests already made by this frame. Do not fetch,
@@ -73,9 +73,18 @@
           if ((video.error && video.error.code === 4) || failedSources) send(video, event, sourceError, true);
         }, recoveryDelay);
       }
+      function reportState(video) {
+        var raw = video.currentSrc || video.src || (video.querySelector('source[src]') || {}).src || '';
+        if (raw && Date.now() - (stateTimes.get(video) || 0) >= 3000) {
+          stateTimes.set(video,Date.now());
+          win.FlixMedia.postMessage(JSON.stringify({videoId:prefix+'state',event:'state',sourceKind:/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',
+            readyState:video.readyState,networkState:video.networkState,position:0,duration:0,error:0}));
+        }
+      }
       function send(video, event, sourceError, settled) {
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
+        if (!error && video.readyState < 3) reportState(video);
         if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
         // Give the provider's own error handlers time to replace a temporary source.
         // Never unload its document while that recovery can still complete.
@@ -131,7 +140,7 @@
           if (failure && Date.now() < failure.until) {
             var source = mediaSource(video);
             if (source.source + ':' + source.sourceReason !== failure.signature) send(video, 'recovery-scan', failure.error);
-          } else if (!video.paused || !ids.has(video)) send(video, 'scan');
+          } else if (!video.paused || !ids.has(video) || video.readyState === 0) send(video, 'scan');
         });
         // Older WebViews lack document-start scripts. Same-origin frames still work.
         win.document.querySelectorAll('iframe').forEach(function (frame) { try { install(frame.contentWindow); } catch (_) {} });
