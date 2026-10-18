@@ -91,9 +91,9 @@ public class PopupBlockingTest {
             while(SystemClock.uptimeMillis()<until){scenario.onActivity(a->ready.set(a.fullscreenControls()!=null&&a.getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE));if(ready.get())break;SystemClock.sleep(100);}
             assertTrue("Fullscreen should actually rotate to landscape",ready.get());
             waitForJs(scenario,"document.querySelector('video').currentTime>0.2");
-            scenario.onActivity(a->{java.util.ArrayList<android.view.View> buttons=new java.util.ArrayList<>();a.fullscreenControls().findViewsWithText(buttons,"Pausar",android.view.View.FIND_VIEWS_WITH_TEXT);assertFalse(buttons.isEmpty());buttons.get(0).performClick();});
+            clickFullscreenControl(scenario,"Pausar");
             waitForJs(scenario,"document.querySelector('video').paused");
-            scenario.onActivity(a->{java.util.ArrayList<android.view.View> buttons=new java.util.ArrayList<>();a.fullscreenControls().findViewsWithText(buttons,"Reproduzir",android.view.View.FIND_VIEWS_WITH_TEXT);assertFalse(buttons.isEmpty());buttons.get(0).performClick();});
+            clickFullscreenControl(scenario,"Reproduzir");
             waitForJs(scenario,"!document.querySelector('video').paused");saveScreenshot("Flix-tela-cheia.png");
             scenario.onActivity(a->{assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,a.getRequestedOrientation());a.onBackPressed();assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,a.getRequestedOrientation());assertNull(a.fullscreenControls());});
             waitForJs(scenario,"document.querySelector('video').currentTime>0 && !document.querySelector('video').paused");
@@ -116,6 +116,15 @@ public class PopupBlockingTest {
                 controls.release();((android.view.ViewGroup)controls.getParent()).removeView(controls);assertEquals(original,a.getRequestedOrientation());assertEquals(brightness,a.getWindow().getAttributes().screenBrightness,0f);
             });
         }
+    }
+    private void clickFullscreenControl(ActivityScenario<MainActivity> scenario,String label){
+        long until=SystemClock.uptimeMillis()+5000;java.util.concurrent.atomic.AtomicBoolean clicked=new java.util.concurrent.atomic.AtomicBoolean();
+        while(SystemClock.uptimeMillis()<until){scenario.onActivity(a->{
+            FullscreenPlayerLayout controls=a.fullscreenControls();if(controls==null)return;controls.showControls();
+            java.util.ArrayList<android.view.View> buttons=new java.util.ArrayList<>();controls.findViewsWithText(buttons,label,android.view.View.FIND_VIEWS_WITH_TEXT);
+            if(!buttons.isEmpty()){buttons.get(0).performClick();clicked.set(true);}
+        });if(clicked.get())return;SystemClock.sleep(100);}
+        fail("Fullscreen control did not reflect confirmed media state: "+label);
     }
     private static int ViewSpec(int size){return android.view.View.MeasureSpec.makeMeasureSpec(size,android.view.View.MeasureSpec.EXACTLY);}
     private static void touchControls(FullscreenPlayerLayout controls,float x,float y,float toX,float toY){
