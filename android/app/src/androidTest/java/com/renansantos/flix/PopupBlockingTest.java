@@ -94,7 +94,7 @@ public class PopupBlockingTest {
             clickFullscreenControl(scenario,"Pausar");
             waitForJs(scenario,"document.querySelector('video').paused");
             clickFullscreenControl(scenario,"Reproduzir");
-            waitForJs(scenario,"!document.querySelector('video').paused");saveScreenshot("Flix-tela-cheia.png");
+            waitForJs(scenario,"!document.querySelector('video').paused");SystemClock.sleep(500);scenario.onActivity(a->a.fullscreenControls().showControls());saveScreenshot("Flix-tela-cheia.png");
             scenario.onActivity(a->{assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,a.getRequestedOrientation());a.onBackPressed();assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,a.getRequestedOrientation());assertNull(a.fullscreenControls());});
             waitForJs(scenario,"document.querySelector('video').currentTime>0 && !document.querySelector('video').paused && document.querySelector('video').controls");
         }

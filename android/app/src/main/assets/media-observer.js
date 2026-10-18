@@ -8,7 +8,7 @@
       win.__flixMediaObserver = true;
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
       var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
-      var recoveryDelay = 5000, lastAdTime = 0, castSources = new WeakMap(), fullscreenControls = new Map();
+      var recoveryDelay = 5000, lastAdTime = 0, castSources = new WeakMap(), fullscreenControls = new Map(), fullscreenStyle;
       var wantedPlayback = new WeakMap(), browserRetried = new WeakSet(), startedVideos = new WeakSet();
       function retryWanted(video) { return !startedVideos.has(video)&&(wantedPlayback.get(video)===true||!video.paused); }
       function identity(video) {
@@ -190,8 +190,11 @@
       });
       win.document.addEventListener('fullscreenchange',function(){
         var full=win.document.fullscreenElement;
-        fullscreenControls.forEach(function(value,video){if(!full||!(full===video||(full.contains&&full.contains(video)))){video.controls=value;fullscreenControls.delete(video);}});
-        if(full)win.document.querySelectorAll('video').forEach(function(video){if((full===video||(full.contains&&full.contains(video)))&&video.controls){fullscreenControls.set(video,true);video.controls=false;}});
+        fullscreenControls.forEach(function(value,video){if(!full||!(full===video||(full.contains&&full.contains(video)))){video.controls=value;video.removeAttribute('data-flix-fullscreen-controls');fullscreenControls.delete(video);}});
+        if(full){
+          if(!fullscreenStyle){fullscreenStyle=win.document.createElement('style');fullscreenStyle.textContent='video[data-flix-fullscreen-controls]::-webkit-media-controls,video[data-flix-fullscreen-controls]::-webkit-media-controls-enclosure,video[data-flix-fullscreen-controls]::-webkit-media-controls-panel{display:none!important;opacity:0!important;pointer-events:none!important}';(win.document.head||win.document.documentElement).appendChild(fullscreenStyle);}
+          win.document.querySelectorAll('video').forEach(function(video){if(full===video||(full.contains&&full.contains(video))){if(!fullscreenControls.has(video))fullscreenControls.set(video,video.controls);video.setAttribute('data-flix-fullscreen-controls','');video.controls=false;}});
+        }else if(fullscreenStyle){fullscreenStyle.remove();fullscreenStyle=null;}
       });
       function scan() {
         var frameVideos=win.document.querySelectorAll('video');
