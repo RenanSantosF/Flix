@@ -53,6 +53,16 @@ public class BrowserRequestGateTest {
         gate.source(MEDIA);assertTrue(gate.terminal());assertFalse(gate.await(MEDIA,()->fail("Long wait")));
         gate.clear();gate.source(MEDIA);assertFalse(gate.terminal());assertFalse(gate.ownsRetry(MEDIA));
     }
+    @Test public void retryBeforeTheFirstVideoStateStillWaitsAndSourceDiscoveryDoesNotCancelIt() throws Exception {
+        AtomicLong now=new AtomicLong(1000);BrowserRequestGate gate=new BrowserRequestGate(now::get);
+        gate.limited(MEDIA,new MediaRateLimit.Deadline(3000,true));
+        ExecutorService worker=Executors.newSingleThreadExecutor();CountDownLatch waiting=new CountDownLatch(1);
+        try{
+            Future<Boolean> result=worker.submit(()->gate.await(MEDIA,waiting::countDown));assertTrue(waiting.await(1,TimeUnit.SECONDS));
+            gate.source(MEDIA);assertFalse(result.isDone());assertTrue(gate.ownsRetry(MEDIA));
+            now.set(3000);gate.visible(true);assertTrue(result.get(1,TimeUnit.SECONDS));
+        }finally{worker.shutdownNow();}
+    }
     @Test public void aLaterHostDeadlinePostponesTheAlreadyWaitingCurrentVideo() throws Exception {
         AtomicLong now=new AtomicLong(1000);BrowserRequestGate gate=new BrowserRequestGate(now::get);
         gate.source(MEDIA);gate.limited(MEDIA,new MediaRateLimit.Deadline(3000,true));

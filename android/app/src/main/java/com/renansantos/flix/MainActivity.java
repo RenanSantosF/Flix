@@ -179,9 +179,9 @@ public final class MainActivity extends Activity {
                 if (selfTest() && testHtml != null && request.isForMainFrame() && (NavigationPolicy.HOME + "android-test").equals(url))
                     return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(testHtml.getBytes(StandardCharsets.UTF_8)));
                 if (NavigationPolicy.blockNetworkRequest(url,request.isForMainFrame())) { noteBlockedNavigation(); return emptyResponse(); }
-                if(!request.isForMainFrame()&&!requestGate.await(url,()->handler.post(()->{
+                if(!request.isForMainFrame()&&"GET".equals(request.getMethod())&&!requestGate.await(url,()->handler.post(()->{
                     if(!destroyed&&!contextKey.isEmpty()&&requestGate.ownsRetry(url))diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · repetição do provedor aguardando Retry-After no WebView · "+browserDiagnostics.summary(""));
-                })))return emptyResponse();
+                })))return new WebResourceResponse("text/plain","UTF-8",429,"Too Many Requests",Collections.singletonMap("X-Flix-Local-Cooldown","1"),new ByteArrayInputStream(new byte[0]));
                 if(selfTest()&&testBootstrap!=null&&"https://asiafilm.org/flix-player-test.js".equals(url))
                     return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream(testBootstrap.getBytes(StandardCharsets.UTF_8)));
                 if(selfTest()&&testManifest!=null&&(NavigationPolicy.HOME+"test-stream.m3u8").equals(url))
@@ -197,12 +197,13 @@ public final class MainActivity extends Activity {
                 return null;
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
+                if(response.getResponseHeaders()!=null&&"1".equals(response.getResponseHeaders().get("X-Flix-Local-Cooldown")))return;
                 if(!contextKey.isEmpty())browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode(),requestDestination(request),response.getMimeType());
                 if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl())) {
                     MediaRateLimit.Deadline deadline=nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
                     if(!contextKey.isEmpty()){
                         String url=request.getUrl().toString();browserRetry.limited(url,deadline);
-                        if(requestGate.limited(url,deadline))stopLimitedProvider();else scheduleWebRetry();
+                        if("GET".equals(request.getMethod())&&requestGate.limited(url,deadline))stopLimitedProvider();else scheduleWebRetry();
                     }
                 }
             }

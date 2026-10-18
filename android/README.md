@@ -8,12 +8,13 @@ load/play novamente sobre a mesma fonte. O console repetiu erro 4 várias vezes
 por segundo enquanto o vídeo permanecia em readyState 0. A espera da versão 0.13
 controlava somente a tentativa do Flix; não segurava as tentativas do provedor.
 
-Agora, quando o recurso exato de vídeo já recebeu HTTP 429 e foi identificado
-pelo observador, novas solicitações dessa mesma URL aguardam Retry-After no
+Agora, quando um recurso GET já recebeu HTTP 429, novas solicitações
+dessa mesma URL aguardam Retry-After no
 worker de requisições do WebView. Ao final, retorna-se null para o Chromium
 continuar a solicitação original: nenhum cliente, URL, Range, cookie, Referer,
-UA ou corpo é substituído. Outros recursos e fontes saudáveis não entram nessa
-espera. A interface Android permanece livre; troca de fonte/contexto, saída do
+UA ou corpo é substituído. Recursos sem 429 e fontes saudáveis não entram nessa
+espera. O início da espera não depende do evento atrasado do vídeo; o
+encerramento do iframe por recusa persistente exige a correlação com a mídia. A interface Android permanece livre; troca de fonte/contexto, saída do
 app ou destruição cancelam o worker pendente. O prazo máximo aguardado é 5 min.
 
 A tentativa do próprio player e a tentativa agendada pelo Flix compartilham o

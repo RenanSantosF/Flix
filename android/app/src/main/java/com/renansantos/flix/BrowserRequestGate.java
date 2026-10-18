@@ -3,11 +3,11 @@ package com.renansantos.flix;
 import java.util.LinkedHashMap;
 import java.util.function.LongSupplier;
 
-/** Holds only a current video URL already refused with 429; Chromium owns the request. */
+/** Holds exact GET resources already refused with 429; Chromium owns each request. */
 final class BrowserRequestGate {
     private static final long MAX_WAIT=300000;
     private static final class Entry {
-        long until; int pending; boolean retried, terminal;
+        long until; int pending, epoch; boolean retried, terminal, stale;
         Entry(long until){this.until=until;}
     }
     private final LinkedHashMap<String,Entry> limits=new LinkedHashMap<>();
@@ -18,7 +18,11 @@ final class BrowserRequestGate {
     BrowserRequestGate(LongSupplier clock){this.clock=clock;}
     synchronized void clear(){generation++;source="";limits.clear();held=0;notifyAll();}
     synchronized void visible(boolean value){visible=value;if(!value)generation++;notifyAll();}
-    synchronized void source(String value){String next=key(value);if(!next.equals(source)){source=next;generation++;notifyAll();}}
+    synchronized void source(String value){
+        String next=key(value);if(next.equals(source))return;
+        Entry old=limits.get(source);if(old!=null){old.stale=true;old.epoch++;}
+        source=next;Entry current=limits.get(source);if(current!=null)current.stale=false;notifyAll();
+    }
     /** True after a second refusal of this exact source, or an impractically long wait. */
     synchronized boolean limited(String value,MediaRateLimit.Deadline deadline){
         if(!MediaUrlPolicy.allowed(value)||deadline==null)return false;
@@ -32,19 +36,19 @@ final class BrowserRequestGate {
         notifyAll();return entry.terminal&&url.equals(source);
     }
     synchronized boolean terminal(){Entry entry=limits.get(source);return entry!=null&&entry.terminal;}
-    synchronized boolean ownsRetry(String value){Entry entry=limits.get(key(value));return key(value).equals(source)&&(entry!=null&&(entry.pending>0||entry.retried));}
+    synchronized boolean ownsRetry(String value){Entry entry=limits.get(key(value));return entry!=null&&(entry.pending>0||entry.retried);}
     synchronized void appRetry(String value){Entry entry=limits.get(key(value));if(entry!=null)entry.retried=true;}
     synchronized int held(){return held;}
     /** Called on WebView's request worker, never the UI thread. False cancels stale work. */
     synchronized boolean await(String value,Runnable waiting){
         String url=key(value);Entry entry=limits.get(url);
-        if(!url.equals(source)||entry==null)return true;
-        if(entry.terminal)return false;
-        if(entry.until<=clock.getAsLong())return true;
+        if(entry==null)return true;
+        if(entry.terminal||entry.stale)return false;
+        if(entry.until<=clock.getAsLong()){entry.retried=true;return true;}
         if(!visible)return false;
-        int version=generation;entry.pending++;held++;waiting.run();
+        int version=generation,epoch=entry.epoch;entry.pending++;held++;waiting.run();
         try {
-            while(visible&&generation==version&&url.equals(source)&&!entry.terminal){
+            while(visible&&generation==version&&entry.epoch==epoch&&!entry.stale&&!entry.terminal){
                 long remaining=entry.until-clock.getAsLong();
                 if(remaining<=0){entry.retried=true;return true;}
                 wait(Math.min(remaining,250));
