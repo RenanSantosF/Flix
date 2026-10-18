@@ -145,6 +145,10 @@
             var playing=video.play();if(playing&&playing.catch)playing.catch(function(){reportState(video);});
           } else if (data.type === 'restore' && isFinite(data.position) && data.position > 0 && isFinite(video.duration)) {
             video.currentTime = Math.max(0, Math.min(data.position, video.duration - 1));
+          } else if (data.type === 'toggle') {
+            if(video.paused){var play=video.play();if(play&&play.catch)play.catch(function(){});}else video.pause();
+          } else if (data.type === 'seek' && isFinite(video.duration) && video.duration>0 && (data.seconds===10||data.seconds===-10)) {
+            video.currentTime=Math.max(0,Math.min(video.duration-0.1,video.currentTime+data.seconds));
           } else if (data.type === 'pause') { wantedPlayback.set(video,false);video.pause(); send(video, 'pause'); }
         } catch (_) {}
       };

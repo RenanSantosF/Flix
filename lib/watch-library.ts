@@ -1,6 +1,6 @@
 import {normalizeTitle, titleKey} from './catalog.ts';
 import type {Title} from './catalog.ts';
-export type WatchEntry = {title:Title; season:number; episode:number; position:number; duration:number; updatedAt:number; completed:boolean};
+export type WatchEntry = {title:Title; season:number; episode:number; position:number; duration:number; updatedAt:number; completed:boolean;queued?:boolean};
 export type WatchLibrary = {favorites:Title[]; history:WatchEntry[]};
 export const STORAGE_KEY='flix:library:v1';
 export const EMPTY_LIBRARY:WatchLibrary={favorites:[],history:[]};
@@ -18,7 +18,8 @@ export function parseLibrary(raw:string|null):WatchLibrary {
     const history=(Array.isArray(data?.history)?data.history:[]).flatMap((v:any)=>{
       const title=normalizeTitle(v?.title);if(!title||seen.has(titleKey(title)))return [];
       seen.add(titleKey(title));const duration=seconds(v.duration);const position=Math.min(seconds(v.position),duration||604800);
-      return [{title,season:seasonNumber(v.season),episode:positive(v.episode),position,duration,updatedAt:typeof v.updatedAt==='number'&&Number.isFinite(v.updatedAt)&&v.updatedAt>0?Math.min(v.updatedAt,Date.now()):0,completed:duration>0&&position/duration>=.95}];
+      if(position<=0&&!(v.queued===true&&title.media_type==='tv'))return [];
+      return [{title,queued:v.queued===true&&title.media_type==='tv'&&position===0,season:seasonNumber(v.season),episode:positive(v.episode),position,duration,updatedAt:typeof v.updatedAt==='number'&&Number.isFinite(v.updatedAt)&&v.updatedAt>0?Math.min(v.updatedAt,Date.now()):0,completed:duration>0&&position/duration>=.95}];
     }).sort((a:WatchEntry,b:WatchEntry)=>b.updatedAt-a.updatedAt).slice(0,80);
     return {favorites,history};
   } catch {return {favorites:[],history:[]};}
@@ -48,7 +49,7 @@ export function applyProgress(data:WatchLibrary,key:string,season:number,episode
   if(!Number.isFinite(position)||!Number.isFinite(duration)||position<0||duration<=0||duration>604800)return data;
   const old=data.history.find(h=>titleKey(h.title)===key);
   if(!old||old.season!==season||old.episode!==episode)return data;
-  const entry={...old,position:Math.min(position,duration),duration,updatedAt:Date.now(),completed:position/duration>=.95};
+  const entry={...old,queued:false,position:Math.min(position,duration),duration,updatedAt:Date.now(),completed:position/duration>=.95};
   return {...data,history:[entry,...data.history.filter(h=>titleKey(h.title)!==key)]};
 }
 export function recordProgress(key:string,season:number,episode:number,position:number,duration:number) {
@@ -57,3 +58,36 @@ export function recordProgress(key:string,season:number,episode:number,position:
 }
 export function removeHistory(key:string) {const data=readLibrary();save({...data,history:data.history.filter(h=>titleKey(h.title)!==key)});}
 export function timeLabel(seconds:number) {const mins=Math.floor(Math.max(0,seconds)/60);return mins>=60?`${Math.floor(mins/60)}h ${mins%60}min`:`${mins}min`;}
+
+/** Opening server selection is not evidence that a title was watched. */
+export function resumePosition(title:Title,season:number,episode:number) {
+  const old=readLibrary().history.find(h=>titleKey(h.title)===titleKey(title)&&h.season===season&&h.episode===episode&&!h.completed);
+  return old?.position||0;
+}
+export function applyPlayback(data:WatchLibrary,title:Title,season:number,episode:number,position:number,duration:number,playing:boolean):WatchLibrary {
+  if(!Number.isFinite(position)||!Number.isFinite(duration)||position<0||duration<=0||duration>604800)return data;
+  const key=titleKey(title),old=data.history.find(h=>titleKey(h.title)===key);
+  if(!old||old.season!==season||old.episode!==episode||old.queued){
+    if(!playing||position<1)return data;
+    const entry:WatchEntry={title,season:seasonNumber(season),episode:positive(episode),position:Math.min(position,duration),duration,updatedAt:Date.now(),completed:position/duration>=.95};
+    return {...data,history:[entry,...data.history.filter(h=>titleKey(h.title)!==key)].slice(0,80)};
+  }
+  // A startup metadata event must not replace a known resume position with zero.
+  if(position===0&&!playing)return data;
+  return applyProgress(data,key,season,episode,position,duration);
+}
+export function recordPlayback(title:Title,season:number,episode:number,position:number,duration:number,playing:boolean) {
+  const before=readLibrary(),after=applyPlayback(before,title,season,episode,position,duration,playing);
+  if(after!==before)save(after);
+  return after!==before;
+}
+export function queueEpisode(title:Title,season:number,episode:number) {
+  const data=readLibrary(),key=titleKey(title);
+  const entry:WatchEntry={title,season,episode,position:0,duration:0,updatedAt:Date.now(),completed:false,queued:true};
+  save({...data,history:[entry,...data.history.filter(h=>titleKey(h.title)!==key)].slice(0,80)});
+}
+export function remainingLabel(position:number,duration:number) {
+  const remaining=Math.max(0,duration-position);
+  if(remaining<60)return 'Menos de 1 min restante';
+  return `${timeLabel(Math.ceil(remaining/60)*60)} restantes`;
+}

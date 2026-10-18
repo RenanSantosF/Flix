@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- Dynamic provider redirects may use HTTP media; WebView uses browser-compatible HTTPS autoupgrade; active mixed content stays blocked. -->
+    <!-- Dynamic provider redirects may use HTTP media; WebView uses browser-compatible passive media handling; active mixed content stays blocked. -->
     <application android:label="Flix" android:theme="@style/FlixTheme"
         android:icon="@drawable/ic_flix" android:allowBackup="false"
         android:supportsRtl="true" android:usesCleartextTraffic="true"
