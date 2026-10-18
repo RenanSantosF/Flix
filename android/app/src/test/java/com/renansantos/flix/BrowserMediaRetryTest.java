@@ -22,6 +22,13 @@ public class BrowserMediaRetryTest {
         assertTrue(retry.consume(source,5000));retry.succeeded();assertFalse(retry.isLimited(source));
         retry.limited(source,new MediaRateLimit.Deadline(6000,true));assertFalse(retry.consume(source,6000));
     }
+    @Test public void aNewAttemptDoesNotCarryThePreviousHttpFailureIntoCodecRecovery(){
+        BrowserMediaRetry retry=new BrowserMediaRetry();String source="https://cdn.example/movie";
+        retry.limited(source,new MediaRateLimit.Deadline(2000,true));assertTrue(retry.isLimited(source));
+        assertTrue(retry.consume(source,2000));assertFalse(retry.isLimited(source));
+        retry.limited(source,new MediaRateLimit.Deadline(4000,true));
+        assertTrue(retry.isLimited(source));assertFalse(retry.consume(source,4000));
+    }
     @Test public void aLaterLimitOnTheSameHostPostponesAnExistingSource(){
         BrowserMediaRetry retry=new BrowserMediaRetry();String source="https://cdn.example/first";
         retry.limited(source,new MediaRateLimit.Deadline(21000,true));

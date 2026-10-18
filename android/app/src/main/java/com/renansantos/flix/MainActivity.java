@@ -385,6 +385,7 @@ public final class MainActivity extends Activity {
             if(remaining>0){scheduleWebRetry();return;}
             if(!browserRetry.consume(source,System.currentTimeMillis()))return;
             try {
+                browserDiagnostics.retry(source);
                 reply.postMessage(new JSONObject().put("type","retry-source").put("videoId",video).put("source",source).toString());
                 notice("Tentando novamente no player. Se o provedor continuar recusando, selecione outro servidor.");
                 diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · uma retomada no WebView após HTTP 429 · "+browserDiagnostics.summary(""));

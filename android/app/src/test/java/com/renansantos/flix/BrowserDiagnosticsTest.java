@@ -39,4 +39,11 @@ public class BrowserDiagnosticsTest {
         BrowserDiagnostics d=new BrowserDiagnostics();d.console("TypeError: Cannot read properties of null (reading 'closed')","https://cdn.example/script.js?token=hidden",17,true);
         String s=d.summary("");assertTrue(s.contains("null.closed"));assertTrue(s.contains("cdn.example:17"));assertFalse(s.contains("script.js"));assertFalse(s.contains("hidden"));
     }
+    @Test public void aBrowserRetryClearsOnlyTheStaleSourceStatus(){
+        BrowserDiagnostics d=new BrowserDiagnostics();String source="https://cdn.example/movie";
+        d.source(source,"https://player.example");d.http(source,429);d.retry(source);
+        assertFalse(d.summary("").contains("fonte atual HTTP"));
+        d.http(source,429);assertTrue(d.summary("").contains("fonte atual HTTP 429"));
+    }
+
 }
