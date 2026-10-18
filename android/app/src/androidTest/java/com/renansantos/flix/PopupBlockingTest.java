@@ -434,48 +434,43 @@ public class PopupBlockingTest {
             load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><button style='width:100%;height:64px' onclick=\"var v=document.querySelector('video');v.src='/test-web-retry.mp4';v.play().catch(function(){});\">Assistir</button><video controls playsinline></video><script>window.lastNotice='';window.addEventListener('flix:notice',function(e){lastNotice=e.detail});</script>");
             waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,50,32);
-            waitForJs(scenario,"lastNotice.indexOf('Tentando novamente')>=0");SystemClock.sleep(6500);
+            waitForJs(scenario,"lastNotice.indexOf('repetições foram interrompidas')>=0");SystemClock.sleep(2500);
             AtomicReference<Integer> requests=new AtomicReference<>(0),opens=new AtomicReference<>(0);
             scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});
             assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());
         }
     }
 
-    private String comparisonFixture(String clip){
-        return "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"window.popupHandle=window.open('/test-popup-page','_blank')\">Abrir janela</button><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Assistir</button><video controls playsinline src='data:video/mp4;base64,"+clip+"'></video><script>window.popupReady=false;window.addEventListener('message',function(e){if(e.origin==='https://flix-ebon-ten.vercel.app'&&e.data==='popup-loaded')popupReady=true});window.addEventListener('load',function(){FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}))});</script>";
+    private String retryingProviderFixture(){
+        return "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0}</style><button style='width:100%;height:64px' onclick=\"var v=document.querySelector('video');v.src='/test-web-retry.mp4';v.play().catch(function(){});\">Assistir</button><video controls playsinline></video><script>var v=document.querySelector('video');v.addEventListener('error',function(){setTimeout(function(){v.load();v.play().catch(function(){});},50)});</script>";
     }
-    @Test public void checkboxOpensVisibleScriptedPopupsAndRestoresProtectedPlayback() throws Exception {
-        try(ActivityScenario<MainActivity> scenario=launch()) {
-            load(scenario,comparisonFixture(clip()));waitForJs(scenario,"!!window.__flixMediaObserver");
-            AtomicReference<Boolean> enabled=new AtomicReference<>(true);scenario.onActivity(a->enabled.set(a.isAdTest()));assertFalse(enabled.get());
-            js(scenario,"localStorage.setItem('comparison-retained','yes');true");
-            scenario.onActivity(a->a.toggleAdTest());
-            waitForJs(scenario,"document.title==='Popup test' && typeof FlixMedia==='undefined' && typeof __flixMediaObserver==='undefined'");
-            assertEquals("\"yes\"",js(scenario,"localStorage.getItem('comparison-retained')"));
-            tap(scenario,50,32);waitForJs(scenario,"popupReady && popupHandle && !popupHandle.closed");
-            AtomicReference<Integer> count=new AtomicReference<>(0);AtomicReference<Boolean> visible=new AtomicReference<>(false);
-            scenario.onActivity(a->{count.set(a.externalWindowCount());visible.set(a.externalWindowsVisible());});
-            assertEquals(1,(int)count.get());assertTrue(visible.get());assertEquals(0,count(scenario,true));
-            saveScreenshot("Flix-janela-externa-visivel.png");
-            js(scenario,"popupHandle.close();true");waitForJs(scenario,"popupHandle.closed");
-            tap(scenario,50,96);waitForJs(scenario,"document.querySelector('video').currentTime>0.3");
-            AtomicReference<Integer> nativeOpens=new AtomicReference<>(-1);scenario.onActivity(a->{nativeOpens.set(a.nativeOpenCount());count.set(a.externalWindowCount());});
-            assertEquals(0,(int)nativeOpens.get());assertEquals(0,(int)count.get());
-            saveScreenshot("Flix-checkbox-sem-bloqueios.png");
-            scenario.onActivity(a->a.toggleAdTest());waitForJs(scenario,"document.title==='Popup test' && !!window.FlixMedia && !!window.__flixMediaObserver");
-            assertEquals("\"yes\"",js(scenario,"localStorage.getItem('comparison-retained')"));
-            tap(scenario,50,32);waitForCount(scenario,true,1);
-            assertEquals("false",js(scenario,"popupReady"));scenario.onActivity(a->enabled.set(a.isAdTest()));assertFalse(enabled.get());
+    private String gateParentFixture(){
+        return "<!doctype html><title>Popup test</title><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0}iframe{width:100%;height:400px;border:0}</style><div id='player-frame'><iframe src='/android-test-frame'></iframe></div><script>window.lastProgress=null;window.lastNotice='';window.stopped=false;window.ticks=0;setInterval(function(){ticks++},100);addEventListener('flix:progress',function(e){lastProgress=e.detail});addEventListener('flix:notice',function(e){lastNotice=e.detail});addEventListener('flix:provider-limited',function(){stopped=true;document.querySelector('iframe').src='about:blank'});</script>";
+    }
+    @Test public void providerErrorReloadWaitsBeforeConnectingAndPlaysWithoutDuplicateAppRetry() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            byte[] clip=recoveryClip();scenario.onActivity(a->{a.getSharedPreferences("media-cooldowns",Context.MODE_PRIVATE).edit().clear().commit();a.testWebRetryClip(clip,false);a.testChildHtml(retryingProviderFixture());});
+            load(scenario,gateParentFixture());waitForJs(scenario,"!!window.FlixControl && !!document.querySelector('iframe').contentWindow.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");
+            long start=SystemClock.elapsedRealtime();tap(scenario,50,32);
+            waitForJs(scenario,"lastProgress && lastProgress.playing && lastProgress.position>0.1");assertTrue(SystemClock.elapsedRealtime()-start>=2000);
+            AtomicReference<Integer> requests=new AtomicReference<>(0),held=new AtomicReference<>(0),opens=new AtomicReference<>(0);AtomicReference<Long> interval=new AtomicReference<>(0L);
+            scenario.onActivity(a->{requests.set(a.testWebRetryCount());held.set(a.testHeldRequests());opens.set(a.nativeOpenCount());interval.set(a.testWebRetryInterval());});
+            assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());assertTrue("Provider retry must wait locally",held.get()>=1);
+            assertTrue("No second network request before Retry-After: "+interval.get(),interval.get()>=2000);
+            assertEquals("true",js(scenario,"ticks>15 && !stopped && document.querySelector('iframe').contentWindow.document.querySelector('video').readyState>=3"));
+            saveScreenshot("Flix-espera-da-repeticao-do-provedor.png");
         }
     }
-    @Test public void checkboxAllowsExternalNavigationAndCanReturnToProtectedApp() throws Exception {
-        try(ActivityScenario<MainActivity> scenario=launch()) {
-            load(scenario,comparisonFixture(clip()));waitForJs(scenario,"!!window.__flixMediaObserver");
-            scenario.onActivity(a->a.toggleAdTest());waitForJs(scenario,"document.title==='Popup test' && typeof FlixMedia==='undefined'");
-            js(scenario,"location.href='https://outside.example/flix-test';true");waitForJs(scenario,"document.title==='External test'");
-            scenario.onActivity(a->{assertTrue(a.isAdTest());assertEquals(android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW,a.testBrowser().getSettings().getMixedContentMode());assertFalse(a.testBrowser().getSettings().getMediaPlaybackRequiresUserGesture());});
-            scenario.onActivity(a->a.toggleAdTest());waitForJs(scenario,"document.title==='Popup test' && !!window.__flixMediaObserver");
-            scenario.onActivity(a->{assertFalse(a.isAdTest());assertEquals(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW,a.testBrowser().getSettings().getMixedContentMode());assertTrue(a.testBrowser().getSettings().getMediaPlaybackRequiresUserGesture());assertEquals(0,a.externalWindowCount());});
+    @Test public void providerRepeated429UnloadsItsRetryLoopAndKeepsAppResponsive() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            scenario.onActivity(a->{a.getSharedPreferences("media-cooldowns",Context.MODE_PRIVATE).edit().clear().commit();a.testWebRetryClip(new byte[0],true);a.testChildHtml(retryingProviderFixture());});
+            load(scenario,gateParentFixture());waitForJs(scenario,"!!window.FlixControl && !!document.querySelector('iframe').contentWindow.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,50,32);
+            waitForJs(scenario,"stopped && lastNotice.indexOf('repetições foram interrompidas')>=0");SystemClock.sleep(2500);
+            AtomicReference<Integer> requests=new AtomicReference<>(0),opens=new AtomicReference<>(0);scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});
+            assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());assertEquals("true",js(scenario,"ticks>30 && document.querySelector('iframe').contentWindow.location.href==='about:blank'"));
+            saveScreenshot("Flix-repeticoes-interrompidas.png");
         }
     }
 

@@ -6,8 +6,8 @@ android {
         applicationId 'com.renansantos.flix'
         minSdk 26
         targetSdk 35
-        versionCode 14
-        versionName '0.14-ad-test'
+        versionCode 15
+        versionName '0.15-cooldown'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true }
