@@ -453,11 +453,11 @@ public class PopupBlockingTest {
             load(scenario,gateParentFixture());waitForJs(scenario,"!!window.FlixControl && !!document.querySelector('iframe').contentWindow.__flixMediaObserver");
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");
             long start=SystemClock.elapsedRealtime();tap(scenario,50,32);
-            waitForJs(scenario,"lastNotice.indexOf('HTTP 429')>=0");
-            SystemClock.sleep(700);AtomicReference<Integer> requests=new AtomicReference<>(0),held=new AtomicReference<>(0),opens=new AtomicReference<>(0);
-            scenario.onActivity(a->{requests.set(a.testWebRetryCount());held.set(a.testHeldRequests());});assertEquals(1,(int)requests.get());assertTrue("Provider retry must wait locally",held.get()>=1);
             waitForJs(scenario,"lastProgress && lastProgress.playing && lastProgress.position>0.1");assertTrue(SystemClock.elapsedRealtime()-start>=2000);
-            scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());
+            AtomicReference<Integer> requests=new AtomicReference<>(0),held=new AtomicReference<>(0),opens=new AtomicReference<>(0);AtomicReference<Long> interval=new AtomicReference<>(0L);
+            scenario.onActivity(a->{requests.set(a.testWebRetryCount());held.set(a.testHeldRequests());opens.set(a.nativeOpenCount());interval.set(a.testWebRetryInterval());});
+            assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());assertTrue("Provider retry must wait locally",held.get()>=1);
+            assertTrue("No second network request before Retry-After: "+interval.get(),interval.get()>=2000);
             assertEquals("true",js(scenario,"ticks>15 && !stopped && document.querySelector('iframe').contentWindow.document.querySelector('video').readyState>=3"));
             saveScreenshot("Flix-espera-da-repeticao-do-provedor.png");
         }

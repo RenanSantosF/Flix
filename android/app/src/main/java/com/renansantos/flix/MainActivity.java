@@ -82,6 +82,7 @@ public final class MainActivity extends Activity {
     private byte[] testWebClip;
     private boolean testWebAlwaysLimited;
     private final AtomicInteger testWebRequests=new AtomicInteger();
+    private volatile long testWebFirstRequestAt,testWebSecondRequestAt;
     private boolean nativeWaitingNotice;
     private Runnable pendingRecovery;
     private String pendingToken="";
@@ -189,7 +190,8 @@ public final class MainActivity extends Activity {
                 if(selfTest()&&testChildHtml!=null&&(NavigationPolicy.HOME+"android-test-frame").equals(url))
                     return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream(testChildHtml.getBytes(StandardCharsets.UTF_8)));
                 if(selfTest()&&testWebClip!=null&&(NavigationPolicy.HOME+"test-web-retry.mp4").equals(url)) {
-                    if(testWebRequests.incrementAndGet()==1||testWebAlwaysLimited)return new WebResourceResponse("application/json","UTF-8",429,"Too Many Requests",Collections.singletonMap("Retry-After","2"),new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8)));
+                    int attempt=testWebRequests.incrementAndGet();long at=android.os.SystemClock.elapsedRealtime();if(attempt==1)testWebFirstRequestAt=at;if(attempt==2)testWebSecondRequestAt=at;
+                    if(attempt==1||testWebAlwaysLimited)return new WebResourceResponse("application/json","UTF-8",429,"Too Many Requests",Collections.singletonMap("Retry-After","2"),new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8)));
                     return new WebResourceResponse("video/mp4",null,new ByteArrayInputStream(testWebClip));
                 }
                 if(selfTest()&&(NavigationPolicy.HOME+"test-browser-pull").equals(url)) {testBrowserPulls.incrementAndGet();return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[]{1}));}
@@ -609,6 +611,7 @@ public final class MainActivity extends Activity {
     void testWebRetryClip(byte[] clip,boolean alwaysLimited){if(!selfTest())throw new IllegalStateException("Debug fixture only");testWebClip=clip;testWebAlwaysLimited=alwaysLimited;}
     int testWebRetryCount(){return testWebRequests.get();}
     int testHeldRequests(){return requestGate.held();}
+    long testWebRetryInterval(){return testWebSecondRequestAt-testWebFirstRequestAt;}
     void testStallDelay(int millis){if(!selfTest())throw new IllegalStateException("Debug fixture only");stallDelayMs=millis;}
     int nativeOpenCount(){return testNativeOpens;}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
