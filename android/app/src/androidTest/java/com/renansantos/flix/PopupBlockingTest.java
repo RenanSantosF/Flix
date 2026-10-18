@@ -388,7 +388,7 @@ public class PopupBlockingTest {
             saveScreenshot("Flix-transferencia-exclusiva.png");
         }
     }
-    @Test public void browser429IsSharedBeforeNativeMakesItsFirstMediaRequest() throws Exception {
+    @Test public void browser429WithoutPlayIntentNeverStartsNativeOrRetries() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()) {
             byte[] clip=recoveryClip();
             scenario.onActivity(a->{a.getSharedPreferences("media-cooldowns",android.content.Context.MODE_PRIVATE).edit().clear().commit();a.nativeSharedRateClip(clip);a.testChildHtml("<!doctype html><video src='/test-web-limit.mp4'></video>");});
@@ -400,11 +400,42 @@ public class PopupBlockingTest {
             AtomicReference<Integer> browserCount=new AtomicReference<>(0),nativeCount=new AtomicReference<>(0);
             scenario.onActivity(a->{browserCount.set(a.browserLimitCount());nativeCount.set(a.sharedNativePullCount());});
             assertEquals(1,(int)browserCount.get());assertEquals(0,(int)nativeCount.get());
-            waitForJs(scenario,"lastProgress && lastProgress.playing");assertTrue(SystemClock.elapsedRealtime()-start>=8000);
+            SystemClock.sleep(8500);
             scenario.onActivity(a->{browserCount.set(a.browserLimitCount());nativeCount.set(a.sharedNativePullCount());});
-            assertEquals(1,(int)browserCount.get());assertEquals(1,(int)nativeCount.get());
-            assertEquals("true",js(scenario,"document.querySelector('iframe').contentWindow.location.href==='about:blank'"));
-            saveScreenshot("Flix-primeiro-429-compartilhado.png");
+            assertEquals(1,(int)browserCount.get());assertEquals(0,(int)nativeCount.get());
+            assertEquals("true",js(scenario,"document.querySelector('iframe').contentWindow.location.href!=='about:blank' && !lastProgress"));
+        }
+    }
+
+    @Test public void browser429RetriesAfterServerDeadlineAndPlaysInTheSameDocument() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            byte[] clip=recoveryClip();
+            scenario.onActivity(a->{a.getSharedPreferences("media-cooldowns",android.content.Context.MODE_PRIVATE).edit().clear().commit();a.testWebRetryClip(clip,false);});
+            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><button style='width:100%;height:64px' onclick=\"var v=document.querySelector('video');v.src='/test-web-retry.mp4';v.play().catch(function(){});\">Assistir</button><video controls playsinline></video><script>window.lastProgress=null;window.lastNotice='';window.ticks=0;setInterval(function(){ticks++},100);window.addEventListener('flix:progress',function(e){lastProgress=e.detail});window.addEventListener('flix:notice',function(e){lastNotice=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");
+            long start=SystemClock.elapsedRealtime();tap(scenario,50,32);
+            waitForJs(scenario,"lastNotice.indexOf('HTTP 429')>=0");
+            AtomicReference<Integer> requests=new AtomicReference<>(0),opens=new AtomicReference<>(0);
+            scenario.onActivity(a->requests.set(a.testWebRetryCount()));assertEquals(1,(int)requests.get());
+            waitForJs(scenario,"lastProgress && lastProgress.playing && lastProgress.position>0.1");
+            assertTrue(SystemClock.elapsedRealtime()-start>=2000);
+            scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});
+            assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());
+            assertEquals("true",js(scenario,"ticks>15 && document.querySelector('video').readyState>=3 && lastNotice===''") );
+            saveScreenshot("Flix-retomada-WebView-429.png");
+        }
+    }
+    @Test public void repeatedBrowser429DoesNotLoopOrOpenNativePlayback() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()) {
+            scenario.onActivity(a->{a.getSharedPreferences("media-cooldowns",android.content.Context.MODE_PRIVATE).edit().clear().commit();a.testWebRetryClip(new byte[0],true);});
+            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><button style='width:100%;height:64px' onclick=\"var v=document.querySelector('video');v.src='/test-web-retry.mp4';v.play().catch(function(){});\">Assistir</button><video controls playsinline></video><script>window.lastNotice='';window.addEventListener('flix:notice',function(e){lastNotice=e.detail});</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,50,32);
+            waitForJs(scenario,"lastNotice.indexOf('Tentando novamente')>=0");SystemClock.sleep(6500);
+            AtomicReference<Integer> requests=new AtomicReference<>(0),opens=new AtomicReference<>(0);
+            scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});
+            assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());
         }
     }
 

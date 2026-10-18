@@ -63,6 +63,10 @@ public final class MainActivity extends Activity {
     private JavaScriptReplyProxy activeReply;
     private NativePlayback nativePlayback;
     private final BrowserDiagnostics browserDiagnostics=new BrowserDiagnostics();
+    private final BrowserMediaRetry browserRetry=new BrowserMediaRetry();
+    private JavaScriptReplyProxy webRetryReply;
+    private String webRetrySource="",webRetryVideo="";
+    private Runnable webRetryTask;
     private int contextGeneration,stallGeneration,stallDelayMs=30000;
     private boolean sessionStarted,stallNotice,stallArmed,terminalBrowserError;
     private androidx.media3.datasource.DataSource.Factory nativeTestSource;
@@ -73,6 +77,9 @@ public final class MainActivity extends Activity {
     private String testHtml, testBootstrap, testManifest, testChildHtml;
     private final AtomicInteger testBrowserPulls=new AtomicInteger(),testBrowserLimits=new AtomicInteger(),testSharedNativePulls=new AtomicInteger();
     private int mediaMessages, testNativeOpens;
+    private byte[] testWebClip;
+    private boolean testWebAlwaysLimited;
+    private final AtomicInteger testWebRequests=new AtomicInteger();
     private boolean nativeWaitingNotice;
     private Runnable pendingRecovery;
     private String pendingToken="";
@@ -176,14 +183,20 @@ public final class MainActivity extends Activity {
                     return new WebResourceResponse("application/vnd.apple.mpegurl","UTF-8",new ByteArrayInputStream(testManifest.getBytes(StandardCharsets.UTF_8)));
                 if(selfTest()&&testChildHtml!=null&&(NavigationPolicy.HOME+"android-test-frame").equals(url))
                     return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream(testChildHtml.getBytes(StandardCharsets.UTF_8)));
+                if(selfTest()&&testWebClip!=null&&(NavigationPolicy.HOME+"test-web-retry.mp4").equals(url)) {
+                    if(testWebRequests.incrementAndGet()==1||testWebAlwaysLimited)return new WebResourceResponse("application/json","UTF-8",429,"Too Many Requests",Collections.singletonMap("Retry-After","2"),new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8)));
+                    return new WebResourceResponse("video/mp4",null,new ByteArrayInputStream(testWebClip));
+                }
                 if(selfTest()&&(NavigationPolicy.HOME+"test-browser-pull").equals(url)) {testBrowserPulls.incrementAndGet();return new WebResourceResponse("text/plain","UTF-8",new ByteArrayInputStream(new byte[]{1}));}
                 if(selfTest()&&(NavigationPolicy.HOME+"test-web-limit.mp4").equals(url)) {testBrowserLimits.incrementAndGet();return new WebResourceResponse("video/mp4","UTF-8",429,"Too Many Requests",Collections.singletonMap("Retry-After","8"),new ByteArrayInputStream(new byte[0]));}
                 return null;
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
                 if(!contextKey.isEmpty())browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode(),requestDestination(request),response.getMimeType());
-                if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl()))
-                    nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
+                if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl())) {
+                    MediaRateLimit.Deadline deadline=nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
+                    if(!contextKey.isEmpty()){browserRetry.limited(request.getUrl().toString(),deadline);scheduleWebRetry();}
+                }
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
                 if (NavigationPolicy.isAppUrl(url)) { lastAppUrl = url; errorPanel.setVisibility(View.GONE); clearPlaybackContext(); }
@@ -278,12 +291,21 @@ public final class MainActivity extends Activity {
                     if(data.optBoolean("adLoading",false))browserDiagnostics.adLoading();
                     browserDiagnostics.source(data.optString("source"),sourceOrigin.toString());
                     browserDiagnostics.state(data.optString("sourceKind"),data.optInt("readyState",-1),data.optInt("networkState",-1));
+                    observeWebRetry(data,reply);
                     terminalBrowserError=false;if(!stallArmed){sessionStarted=false;scheduleStallDiagnostic(contextGeneration);}return;
                 }
                 int error = data.optInt("error", 0);
                 String recoveryReason = "erro de reprodução";
                 if(error==4&&foreground&&(activeVideo.isEmpty()||activeVideo.equals(video))) {
                     String source=data.optString("source"),sourceType=data.optString("sourceType");
+                    // A rejected HTTP source is not a codec failure. Keep its original
+                    // browser session and wait; do not unload it for a second client.
+                    if(browserRetry.isLimited(source)) {
+                        observeWebRetry(data,reply);
+                        if(webRetryTask==null)notice("O provedor limitou esta fonte (HTTP 429). Aguarde antes de recarregar ou selecione outro servidor.");
+                        diagnostic(mediaDiagnostic(data,sourceOrigin.getHost(),"HTTP 429 na fonte do WebView")+" · "+browserDiagnostics.summary(source));
+                        return;
+                    }
                     // The browser may report the same error again after pause/scan.
                     // Never replace the native HTTP/format/decoder failure with a
                     // generic "already attempted" message or issue another request.
@@ -298,7 +320,7 @@ public final class MainActivity extends Activity {
                         recoveryDiagnostic = mediaDiagnostic(data, sourceOrigin.getHost(), "transferência exclusiva para o motor nativo");
                         diagnostic(recoveryDiagnostic);
                         activeVideo=video;activeReply=reply;
-                        exitFullscreen();
+                        cancelWebRetry();exitFullscreen();
                         prepareNativeRecovery(()->{try {
                             if(selfTest())testNativeOpens++;
                             nativePlayback.open(source,sourceType,new MediaRequestContext(data.optString("frameUrl"),sourceOrigin.toString(),data.optString("referrerPolicy"),data.optString("corsMode")),browser.getSettings().getUserAgentString(),
@@ -328,7 +350,7 @@ public final class MainActivity extends Activity {
                     reply.postMessage(restore.toString());
                     return;
                 }
-                playbackActive = playing;if(playing&&(position>0.1||"playing".equals(data.optString("event")))){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
+                playbackActive = playing;if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
@@ -337,6 +359,39 @@ public final class MainActivity extends Activity {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(browser, observerScript, Collections.singleton("*")); documentStartObserver = true;
         }
+    }
+
+    private void cancelWebRetry() {
+        if(webRetryTask!=null)handler.removeCallbacks(webRetryTask);
+        webRetryTask=null;webRetryReply=null;webRetrySource="";webRetryVideo="";
+    }
+    private void observeWebRetry(JSONObject data,JavaScriptReplyProxy reply) {
+        String source=data.optString("source"),video=data.optString("videoId");
+        boolean eligible=data.optBoolean("retryWanted",false)&&!data.optBoolean("adLoading",false)
+            &&data.optInt("readyState",0)==0&&"https".equals(data.optString("sourceKind"))&&MediaUrlPolicy.allowed(source);
+        if(!eligible){cancelWebRetry();return;}
+        if(!source.equals(webRetrySource)||!video.equals(webRetryVideo))cancelWebRetry();
+        webRetrySource=source;webRetryVideo=video;webRetryReply=reply;scheduleWebRetry();
+    }
+    private void scheduleWebRetry() {
+        if(webRetryTask!=null||webRetryReply==null||destroyed||!foreground||contextKey.isEmpty()||pendingRecovery!=null||nativePlayback.isOpen())return;
+        long wait=browserRetry.waitMillis(webRetrySource,System.currentTimeMillis());if(wait<0)return;
+        final int generation=contextGeneration;final String source=webRetrySource,video=webRetryVideo;final JavaScriptReplyProxy reply=webRetryReply;
+        notice("O provedor limitou esta fonte (HTTP 429). Nova tentativa no player em "+Math.max(1,(wait+999)/1000)+" s.");
+        webRetryTask=()->{
+            webRetryTask=null;
+            if(destroyed||!foreground||generation!=contextGeneration||!source.equals(webRetrySource)||!video.equals(webRetryVideo)||pendingRecovery!=null||nativePlayback.isOpen())return;
+            long remaining=browserRetry.waitMillis(source,System.currentTimeMillis());
+            if(remaining>0){scheduleWebRetry();return;}
+            if(!browserRetry.consume(source,System.currentTimeMillis()))return;
+            try {
+                reply.postMessage(new JSONObject().put("type","retry-source").put("videoId",video).put("source",source).toString());
+                notice("Tentando novamente no player. Se o provedor continuar recusando, selecione outro servidor.");
+                diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · uma retomada no WebView após HTTP 429 · "+browserDiagnostics.summary(""));
+                stallNotice=false;stallArmed=false;scheduleStallDiagnostic(contextGeneration);
+            }catch(Exception ignored) {notice("A sessão do player mudou. Recarregue para voltar aos servidores.");}
+        };
+        handler.postDelayed(webRetryTask,Math.max(1,wait));
     }
 
     private void nativeSession(boolean active) {
@@ -369,7 +424,7 @@ public final class MainActivity extends Activity {
     private void scheduleStallDiagnostic(int generation) {
         stallArmed=true;int attempt=++stallGeneration;
         handler.postDelayed(()->{
-            if(destroyed||!foreground||contextGeneration!=generation||stallGeneration!=attempt||terminalBrowserError||contextKey.isEmpty()||sessionStarted||stallNotice||pendingRecovery!=null||nativePlayback.isOpen()||!recoveryFailures.isEmpty())return;
+            if(destroyed||!foreground||webRetryTask!=null||contextGeneration!=generation||stallGeneration!=attempt||terminalBrowserError||contextKey.isEmpty()||sessionStarted||stallNotice||pendingRecovery!=null||nativePlayback.isOpen()||!recoveryFailures.isEmpty())return;
             android.content.pm.PackageInfo engine=WebView.getCurrentWebViewPackage();
             String text="Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · WebView "+(engine==null?"?":engine.versionName)
                 +" · sem reprodução após 30 s · "+browserDiagnostics.summary("");
@@ -377,7 +432,7 @@ public final class MainActivity extends Activity {
         },stallDelayMs);
     }
     private void clearPlaybackContext() {
-        contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
+        cancelWebRetry();browserRetry.clear();contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
         pendingRecovery=null;pendingToken="";
         if(nativePlayback!=null)nativePlayback.close(false);
         recoveredSources.clear(); recoveryFailures.clear(); nativeWaitingNotice=false; recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
@@ -453,6 +508,8 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() {super.onStart();foreground=true;if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
         super.onStop();foreground=false;
+        if(webRetryReply!=null)try{webRetryReply.postMessage(new JSONObject().put("type","pause").put("videoId",webRetryVideo).toString());}catch(Exception ignored){}
+        cancelWebRetry();
         if (!enteringPip && !isInPictureInPictureMode()) {if(pendingRecovery!=null)nativeSession(false);pendingRecovery=null;pendingToken="";if(nativePlayback!=null)nativePlayback.pause();}
         if (!enteringPip && !isInPictureInPictureMode() && activeReply != null) {
             try { activeReply.postMessage(new JSONObject().put("type", "pause").put("videoId", activeVideo).toString()); } catch (Exception ignored) { }
@@ -470,7 +527,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed() { if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.close(true); else if (customView != null) exitFullscreen(); else if (browser.canGoBack()) browser.goBack(); else super.onBackPressed(); }
     @Override protected void onSaveInstanceState(Bundle outState) { browser.saveState(outState); super.onSaveInstanceState(outState); }
     @Override protected void onDestroy() {
-        destroyed = true;pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);
+        destroyed = true;cancelWebRetry();pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);
         for (WebView sink : popupSinks) sink.destroy(); popupSinks.clear();
         if(nativePlayback!=null)nativePlayback.close(false);
         browser.stopLoading(); browser.destroy(); super.onDestroy();
@@ -523,6 +580,8 @@ public final class MainActivity extends Activity {
     void testChildHtml(String html){if(!selfTest())throw new IllegalStateException("Debug fixture only");testChildHtml=html;}
     void nativeSharedRateClip(byte[] clip){if(!selfTest())throw new IllegalStateException("Debug fixture only");nativeTestSource=nativePlayback.sharedRateFixture(clip,testSharedNativePulls);}
     int browserPullCount(){return testBrowserPulls.get();}int browserLimitCount(){return testBrowserLimits.get();}int sharedNativePullCount(){return testSharedNativePulls.get();}
+    void testWebRetryClip(byte[] clip,boolean alwaysLimited){if(!selfTest())throw new IllegalStateException("Debug fixture only");testWebClip=clip;testWebAlwaysLimited=alwaysLimited;}
+    int testWebRetryCount(){return testWebRequests.get();}
     void testStallDelay(int millis){if(!selfTest())throw new IllegalStateException("Debug fixture only");stallDelayMs=millis;}
     int nativeOpenCount(){return testNativeOpens;}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}

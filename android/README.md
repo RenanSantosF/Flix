@@ -1,5 +1,27 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.13: uma fonte que recebe HTTP 429 pode ser retomada uma única vez no
+próprio WebView, após o Retry-After observado (ou 60 s se ele estiver ausente).
+O APK não precisa esperar um erro 4: relaciona o HTTP à fonte exata informada
+pelo vídeo ainda em readyState 0. Antes, esse estado podia ficar carregando
+indefinidamente, enquanto o tratamento de espera existia só no motor nativo.
+
+A retomada preserva o documento e sua sessão. Não modifica URLs, cookies,
+cabeçalhos ou anúncios; usa load/play do mesmo elemento após intenção de play.
+Um 429 conhecido não é entregue ao decodificador como falha de codec.
+Há no máximo uma tentativa automática por contexto, com espera de até 5 min.
+Troca de fonte, vídeo pronto, pausa, anúncio visível, saída do app ou mudança
+de contexto cancelam a retomada. A verificação final acontece no próprio frame.
+Uma segunda recusa não inicia um loop nem outro cliente de rede.
+
+Validação inclui 429 → espera → vídeo H.264 no mesmo documento; segunda recusa
+sem loop nem abertura nativa; correlação exata e cancelamentos do observador.
+Isso corrige o tratamento desse estado no app. Não comprova que o servidor
+alternativo real vá liberar sua fonte após a espera; a validação no aparelho
+continua necessária. A comparação no site parceiro retornou 404 e voltou a
+exigir verificação humana ao renovar a sessão, portanto foi inconclusiva.
+
+
 Versão 0.12 (diagnóstico): identifica host, tipo de recurso (quando observado),
 código de conexão Chromium e templates específicos de erro JavaScript. O status
 HTTP é relacionado à fonte atual mesmo sem erro 4. A fonte atribuída ao vídeo
