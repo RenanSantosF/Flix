@@ -23,7 +23,7 @@ public class BrowserRequestGateTest {
             assertTrue(waiting.await(1,TimeUnit.SECONDS));assertFalse(result.isDone());assertTrue(gate.ownsRetry(MEDIA));
             now.set(2999);gate.visible(true);assertFalse(result.isDone());
             now.set(3000);gate.visible(true);assertTrue(result.get(1,TimeUnit.SECONDS));assertEquals(1,gate.held());
-            assertTrue(gate.await(MEDIA,()->fail("Subsequent healthy range")));
+            gate.visible(false);assertTrue(gate.await(MEDIA,()->fail("Subsequent healthy range remains normal, including PiP")));gate.visible(true);
             assertTrue(gate.limited(MEDIA,new MediaRateLimit.Deadline(5000,true)));assertTrue(gate.terminal());
             assertFalse(gate.await(MEDIA,()->fail("Second refusal must not connect")));
         }finally{worker.shutdownNow();}

@@ -36,8 +36,9 @@ final class BrowserRequestGate {
     synchronized boolean await(String value,Runnable waiting){
         String url=key(value);Entry entry=limits.get(url);
         if(!url.equals(source)||entry==null)return true;
-        if(!visible||entry.terminal)return false;
+        if(entry.terminal)return false;
         if(entry.until<=clock.getAsLong())return true;
+        if(!visible)return false;
         int version=generation;entry.pending++;held++;waiting.run();
         try {
             while(visible&&generation==version&&url.equals(source)&&!entry.terminal){

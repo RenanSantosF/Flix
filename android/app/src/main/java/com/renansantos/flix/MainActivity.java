@@ -180,7 +180,7 @@ public final class MainActivity extends Activity {
                     return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(testHtml.getBytes(StandardCharsets.UTF_8)));
                 if (NavigationPolicy.blockNetworkRequest(url,request.isForMainFrame())) { noteBlockedNavigation(); return emptyResponse(); }
                 if(!request.isForMainFrame()&&!requestGate.await(url,()->handler.post(()->{
-                    if(!destroyed&&!contextKey.isEmpty())diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · repetição do provedor aguardando Retry-After no WebView · "+browserDiagnostics.summary(""));
+                    if(!destroyed&&!contextKey.isEmpty()&&requestGate.ownsRetry(url))diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · repetição do provedor aguardando Retry-After no WebView · "+browserDiagnostics.summary(""));
                 })))return emptyResponse();
                 if(selfTest()&&testBootstrap!=null&&"https://asiafilm.org/flix-player-test.js".equals(url))
                     return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream(testBootstrap.getBytes(StandardCharsets.UTF_8)));
@@ -532,7 +532,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onStart() {super.onStart();foreground=true;requestGate.visible(true);if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
-        super.onStop();foreground=false;requestGate.visible(false);
+        super.onStop();foreground=false;requestGate.visible(enteringPip||isInPictureInPictureMode());
         if(webRetryReply!=null)try{webRetryReply.postMessage(new JSONObject().put("type","pause").put("videoId",webRetryVideo).toString());}catch(Exception ignored){}
         cancelWebRetry();
         if (!enteringPip && !isInPictureInPictureMode()) {if(pendingRecovery!=null)nativeSession(false);pendingRecovery=null;pendingToken="";if(nativePlayback!=null)nativePlayback.pause();}
