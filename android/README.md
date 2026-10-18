@@ -1,5 +1,34 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.14: checkbox nativo “Desativar bloqueio de anúncios” abaixo da área do
+app quando um player está aberto. Desmarcado ao iniciar o aplicativo. A troca
+recarrega o título/transmissão; o modo não é persistido após encerrar o processo.
+
+Marcado: janelas novas são exibidas de verdade, com rede, JavaScript, cookies e
+botão Fechar janela. A abertura é visível antes de iniciar a navegação. Pop-ups
+aninhados seguem o mesmo comportamento e não recebem pontes nativas. HTTP(S),
+redirecionamentos e autoplay passam pelo WebView sem os filtros de navegação do
+Flix; conteúdo misto é permitido durante o teste. Não são alterados certificados
+TLS nem liberado acesso a arquivos locais. Os controles do Android continuam.
+
+O modo também remove o script de observação e a ponte de mídia dos novos
+contextos, desliga transferência nativa, retomada, pausa e repetição automáticas.
+A página própria mantém só sua ponte de controle e os diagnósticos passivos de
+console/HTTP. A personalização noLink/noEpList e o referrerPolicy explícito são
+omitidos no player de teste; a lista de episódios é a do próprio provedor.
+PiP e histórico de posição não são atualizados durante essa comparação, por isso
+a interface de teste não oferece o botão de janela flutuante. Favoritos e histórico
+já salvos são preservados. O aviso de 30 s não afirma falha enquanto o observador
+está desligado; o diagnóstico identifica explicitamente o modo de teste.
+
+Desmarcar fecha todas as janelas abertas, restaura filtros e observação e recarrega
+o título. O controle é nativo, não pode ser ativado por scripts de anúncios e
+continua acessível se a página principal navegar para fora do Flix. O botão Voltar
+ao Flix retorna ao conteúdo selecionado. Não existe carregamento de anúncios
+ocultos. Este modo permite comparar as intervenções do Flix; continua sendo um
+WebView e não demonstra, sozinho, a causa do problema do servidor alternativo.
+
+
 Versão 0.13: uma fonte que recebe HTTP 429 pode ser retomada uma única vez no
 próprio WebView, após o Retry-After observado (ou 60 s se ele estiver ausente).
 O APK não precisa esperar um erro 4: relaciona o HTTP à fonte exata informada

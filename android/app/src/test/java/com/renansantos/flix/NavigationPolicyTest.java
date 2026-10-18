@@ -35,4 +35,11 @@ public class NavigationPolicyTest {
         assertTrue(NavigationPolicy.blockNetworkRequest("https://outside.example/ad",true));
         assertFalse(NavigationPolicy.blockNetworkRequest(NavigationPolicy.HOME,true));
     }
+    @org.junit.Test public void comparisonReloadKeepsOnlyValidatedAppPlaybackTargets(){
+        org.junit.Assert.assertEquals(NavigationPolicy.HOME+"titulo/movie/557?play=1&adTest=1",NavigationPolicy.comparisonUrl("movie:557",true));
+        org.junit.Assert.assertEquals(NavigationPolicy.HOME+"titulo/tv/1396?play=1",NavigationPolicy.comparisonUrl("tv:1396",false));
+        org.junit.Assert.assertEquals(NavigationPolicy.HOME+"ao-vivo?tipo=channel&id=sportv&adTest=1",NavigationPolicy.comparisonUrl("live:channel-sportv",true));
+        org.junit.Assert.assertEquals(NavigationPolicy.HOME,NavigationPolicy.comparisonUrl("https://other.example",true));
+    }
+
 }
