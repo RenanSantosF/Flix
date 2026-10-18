@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONObject;
 
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
-public final class MainActivity extends Activity {
+public final class MainActivity extends androidx.appcompat.app.AppCompatActivity {
     static final String EXTRA_SELF_TEST = "flix.self_test";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ArrayList<WebView> popupSinks = new ArrayList<>();
@@ -63,6 +63,9 @@ public final class MainActivity extends Activity {
     private boolean playbackActive, documentStartObserver, destroyed, enteringPip, foreground;
     private JavaScriptReplyProxy activeReply;
     private NativePlayback nativePlayback;
+    private CastController cast;
+    private String castToken="",contextTitle="Flix";
+    private String testCastSource="";
     private final BrowserDiagnostics browserDiagnostics=new BrowserDiagnostics();
     private final BrowserMediaRetry browserRetry=new BrowserMediaRetry();
     private final BrowserRequestGate requestGate=new BrowserRequestGate(System::currentTimeMillis);
@@ -116,8 +119,8 @@ public final class MainActivity extends Activity {
         configureMediaBridge();
         nativePlayback = new NativePlayback(this, root, this::enterPlayerPip, new NativePlayback.Listener() {
             @Override public void progress(double position,double duration,boolean playing,boolean ended) {
-                if(contextKey.isEmpty()||destroyed)return;
-                playbackActive=playing;if(fullscreenPlayer!=null)fullscreenPlayer.playing(playing);if(playing){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}}root.setKeepScreenOn(playing);updatePipParams();
+                if(contextKey.isEmpty()||destroyed||(cast!=null&&cast.owns()))return;
+                playbackActive=playing;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);}if(playing){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}}root.setKeepScreenOn(playing);updatePipParams();
                 if(playing&&nativeWaitingNotice&&nativePlayback!=null&&!nativePlayback.isWaiting()){nativeWaitingNotice=false;notice("");diagnostic("");}
                 try {
                     JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode)
@@ -133,7 +136,15 @@ public final class MainActivity extends Activity {
             }
             @Override public void closed() { nativeSession(false);playbackActive=false;root.setKeepScreenOn(false);updatePipParams(); }
         });
+        cast=new CastController(this,new CastController.Listener(){
+            public void message(String text){if(!destroyed){notice(text);android.widget.Toast.makeText(MainActivity.this,text,android.widget.Toast.LENGTH_LONG).show();}}
+            public void accepted(){if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.pauseForCast();else localVideoCommand("pause",0);playbackActive=false;root.setKeepScreenOn(false);}
+            public void progress(double position,double duration,boolean playing,boolean ended){if(destroyed||contextKey.isEmpty())return;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);}if(nativePlayback!=null)nativePlayback.castPlaying(playing,position,duration);try{JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode).put("position",position).put("duration",duration).put("playing",playing).put("ended",ended);browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:"+event+"}))",null);}catch(Exception ignored){}}
+        },selfTest());
         browser.setWebChromeClient(new WebChromeClient() {
+            @Override public boolean onJsAlert(WebView view,String url,String message,android.webkit.JsResult result){
+                if(CastRequestPolicy.providerUnsupported(url,message)&&!contextKey.isEmpty()&&foreground){result.confirm();openCast();return true;}return super.onJsAlert(view,url,message,result);
+            }
             @Override public boolean onConsoleMessage(ConsoleMessage message) {
                 if(!contextKey.isEmpty())browserDiagnostics.console(message.message(),message.sourceId(),message.lineNumber(),message.messageLevel()==ConsoleMessage.MessageLevel.ERROR);
                 return true; // Do not forward provider URLs/tokens from console messages to logcat.
@@ -169,6 +180,8 @@ public final class MainActivity extends Activity {
                     public void toggle(){videoCommand("toggle",0);}
                     public void seek(int seconds){videoCommand("seek",seconds);}
                     public void pip(){enterPlayerPip();}
+                    public void cast(){openCast();}
+                    public void seekTo(double seconds){seekVideoTo(seconds);}
                 });
                 root.addView(fullscreenPlayer, new FrameLayout.LayoutParams(-1, -1));
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -287,12 +300,13 @@ public final class MainActivity extends Activity {
                     if(pendingRecovery!=null&&pendingToken.equals(data.optString("token"))) {Runnable open=pendingRecovery;pendingRecovery=null;pendingToken="";activeReply=null;open.run();}
                 }
                 else if ("pip".equals(type)) enterPlayerPip();
+                else if ("cast".equals(type)) openCast();
                 else if ("context".equals(type)) {
                     String key = data.optString("key"); if (!NavigationPolicy.isPlaybackKey(key)) return;
                     String path = android.net.Uri.parse(browser.getUrl() == null ? "" : browser.getUrl()).getPath();
                     boolean test = BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false);
                     if (!test && !NavigationPolicy.matchesPlaybackPath(key, path)) return;
-                    clearPlaybackContext(); contextKey = key;
+                    clearPlaybackContext(); contextKey = key;contextTitle=data.optString("title","Flix");contextTitle=contextTitle.substring(0,Math.min(150,contextTitle.length()));
                     contextSeason = Math.max(0, Math.min(10000, data.optInt("season", 1)));
                     contextEpisode = Math.max(1, Math.min(10000, data.optInt("episode", 1)));
                     double position = data.optDouble("resume", 0);
@@ -313,6 +327,14 @@ public final class MainActivity extends Activity {
                 JSONObject data = new JSONObject(raw); String video = data.optString("videoId");
                 double duration = data.optDouble("duration", 0), position = data.optDouble("position", 0);
                 if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || position < 0 || position > 1e12) return;
+                if("cast-source".equals(data.optString("event"))){
+                    if(!castToken.isEmpty()&&castToken.equals(data.optString("token"))&&video.equals(activeVideo)){
+                        castToken="";
+                        String source=data.optString("source");
+                        if(selfTest()){testCastSource=source;return;}
+                        try{cast.offer(contextKey,new CastMedia(source,data.optString("sourceType"),contextTitle,position,duration,contextKey.startsWith("live:")));}catch(IllegalArgumentException invalid){castMessage("Esta fonte não disponibiliza um endereço compatível com a TV. Tente outro servidor.");}
+                    }return;
+                }
                 if(pendingRecovery!=null||(nativePlayback!=null&&nativePlayback.isOpen()))return;
                 if("state".equals(data.optString("event"))) {
                     if(data.optBoolean("adLoading",false))browserDiagnostics.adLoading();
@@ -368,6 +390,7 @@ public final class MainActivity extends Activity {
                     browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + failure + "}))", null);
                     return;
                 }
+                if(cast!=null&&cast.owns())return;
                 boolean live = contextKey.startsWith("live:") && data.optBoolean("live", false) && duration == 0;
                 if (!live && (duration <= 0 || duration > 604800)) return;
                 boolean playing = data.optBoolean("playing", false);
@@ -379,7 +402,7 @@ public final class MainActivity extends Activity {
                     reply.postMessage(restore.toString());
                     return;
                 }
-                playbackActive = playing;if(fullscreenPlayer!=null)fullscreenPlayer.playing(playing);if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
+                playbackActive = playing;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);}if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
@@ -476,7 +499,7 @@ public final class MainActivity extends Activity {
         },stallDelayMs);
     }
     private void clearPlaybackContext() {
-        cancelWebRetry();browserRetry.clear();requestGate.clear();providerStopped=false;contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
+        castToken="";if(cast!=null)cast.clear();cancelWebRetry();browserRetry.clear();requestGate.clear();providerStopped=false;contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
         pendingRecovery=null;pendingToken="";
         if(nativePlayback!=null)nativePlayback.close(false);
         recoveredSources.clear(); recoveryFailures.clear(); nativeWaitingNotice=false; recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
@@ -562,7 +585,28 @@ public final class MainActivity extends Activity {
     private static WebResourceResponse emptyResponse() { return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes(StandardCharsets.UTF_8))); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void noteBlockedNavigation() { blockedNavigations.incrementAndGet(); }
+    private void castMessage(String text){notice(text);android.widget.Toast.makeText(this,text,android.widget.Toast.LENGTH_LONG).show();}
+    void openCast(){
+        if(destroyed||!foreground||contextKey.isEmpty())return;
+        if(nativePlayback!=null&&nativePlayback.isOpen()){
+            try{cast.offer(contextKey,new CastMedia(recoverySource,nativePlayback.mediaType(),contextTitle,nativePlayback.positionMs()/1000d,nativePlayback.durationMs()/1000d,contextKey.startsWith("live:")));}catch(IllegalArgumentException invalid){castMessage("Esta fonte não está disponível para transmitir à TV.");}return;
+        }
+        if(activeReply==null||activeVideo.isEmpty()){castMessage("Inicie o vídeo e depois toque em Transmitir para TV.");return;}
+        castToken=java.util.UUID.randomUUID().toString();String token=castToken;
+        try{activeReply.postMessage(new JSONObject().put("type","cast-source").put("videoId",activeVideo).put("token",token).toString());}catch(Exception failed){castToken="";castMessage("Não foi possível preparar a transmissão. Tente novamente.");return;}
+        handler.postDelayed(()->{if(token.equals(castToken)){castToken="";castMessage("O player não respondeu. Retome o vídeo e tente transmitir novamente.");}},5000);
+    }
+    private void seekVideoTo(double position){
+        if(cast!=null&&cast.seekTo(position))return;
+        if(activeReply!=null&&!activeVideo.isEmpty())try{activeReply.postMessage(new JSONObject().put("type","seek-to").put("videoId",activeVideo).put("position",position).toString());}catch(Exception ignored){}
+    }
+    boolean castSeekTo(double position){return cast!=null&&cast.seekTo(position);}
+    boolean isCasting(){return cast!=null&&cast.owns();}
+    boolean castControl(String type,int seconds){return cast!=null&&cast.control(type,seconds);}
     private void videoCommand(String type,int seconds){
+        if(cast!=null&&cast.control(type,seconds))return;localVideoCommand(type,seconds);
+    }
+    private void localVideoCommand(String type,int seconds){
         if(activeReply!=null&&!activeVideo.isEmpty())try{activeReply.postMessage(new JSONObject().put("type",type).put("videoId",activeVideo).put("seconds",seconds).toString());}catch(Exception ignored){}
     }
     private void exitFullscreen() {
@@ -576,7 +620,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         destroyed = true;requestGate.clear();cancelWebRetry();pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);
         for (WebView sink : popupSinks) sink.destroy(); popupSinks.clear();
-        exitFullscreen();if(nativePlayback!=null)nativePlayback.close(false);
+        if(cast!=null)cast.destroy();exitFullscreen();if(nativePlayback!=null)nativePlayback.close(false);
         browser.stopLoading(); browser.destroy(); super.onDestroy();
     }
     void playerTestBootstrap(String script) {if(!selfTest())throw new IllegalStateException("Debug fixture only");testBootstrap=script;}
@@ -637,6 +681,7 @@ public final class MainActivity extends Activity {
     int nativeOpenCount(){return testNativeOpens;}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}
+    String testCastSource(){return testCastSource;}
     FullscreenPlayerLayout fullscreenControls(){return fullscreenPlayer;}
     WebView testBrowser() { return browser; }
     void loadTestHtml(String html) { if (!selfTest()) throw new IllegalStateException("Test fixture is debug-only"); testHtml = html; browser.loadUrl(NavigationPolicy.HOME + "android-test"); }

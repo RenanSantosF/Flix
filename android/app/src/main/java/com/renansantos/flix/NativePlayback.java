@@ -56,6 +56,7 @@ final class NativePlayback {
     private final Listener listener;
     private final Runnable pip;
     private ExoPlayer player;
+    private String currentMediaType="";
     private LinearLayout panel;
     private PlayerView playerView;
     private FullscreenPlayerLayout fullscreen;
@@ -124,7 +125,7 @@ final class NativePlayback {
         }).build();return new OkHttpDataSource.Factory(client);
     }
     void open(String source, String sourceType, MediaRequestContext context, String userAgent, double resume, DataSource.Factory testSource) {
-        close(false);
+        close(false);currentMediaType=sourceType;
         final int generation=session;
         // Media URLs can contain ephemeral signatures. Do not let engine errors log them.
         androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF);
@@ -132,12 +133,14 @@ final class NativePlayback {
         panel=new LinearLayout(activity);panel.setOrientation(LinearLayout.VERTICAL);panel.setBackgroundColor(Color.BLACK);
         waitLabel=new TextView(activity);waitLabel.setTextColor(Color.LTGRAY);waitLabel.setTextSize(17);waitLabel.setGravity(Gravity.CENTER);
         waitLabel.setPadding(dp(20),dp(24),dp(20),dp(24));waitLabel.setVisibility(View.GONE);panel.addView(waitLabel,new LinearLayout.LayoutParams(-1,-2));
-        playerView=new PlayerView(activity);playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
+        playerView=new PlayerView(activity);playerView.setUseController(false);playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
         panel.addView(playerView,new LinearLayout.LayoutParams(-1,0,1));fullscreen=new FullscreenPlayerLayout(activity,panel,new FullscreenPlayerLayout.Actions(){
             public void exit(){close(true);}
             public void pip(){pip.run();}
-            public void toggle(){if(player!=null){if(player.isPlaying())player.pause();else player.play();}}
-            public void seek(int seconds){if(player!=null&&!player.isCurrentMediaItemLive()&&player.getDuration()>0)player.seekTo(Math.max(0,Math.min(player.getDuration()-1,player.getCurrentPosition()+seconds*1000L)));}
+            public void cast(){if(activity instanceof MainActivity)((MainActivity)activity).openCast();}
+            public void seekTo(double seconds){if(activity instanceof MainActivity&&((MainActivity)activity).castSeekTo(seconds))return;if(player!=null&&player.getDuration()>0&&!player.isCurrentMediaItemLive())player.seekTo(Math.max(0,Math.min(player.getDuration()-1,(long)(seconds*1000))));}
+            public void toggle(){if(activity instanceof MainActivity&&((MainActivity)activity).castControl("toggle",0))return;if(player!=null){if(player.isPlaying())player.pause();else player.play();}}
+            public void seek(int seconds){if(activity instanceof MainActivity&&((MainActivity)activity).castControl("seek",seconds))return;if(player!=null&&!player.isCurrentMediaItemLive()&&player.getDuration()>0)player.seekTo(Math.max(0,Math.min(player.getDuration()-1,player.getCurrentPosition()+seconds*1000L)));}
         });root.addView(fullscreen,new FrameLayout.LayoutParams(-1,-1));
         final MediaFormatProbe format=new MediaFormatProbe();
         DataSource.Factory requests=testSource!=null?testSource:network(context,userAgent);
@@ -183,7 +186,7 @@ final class NativePlayback {
                 // Retry a parsing failure once only when actual bytes identify that
                 // manifest. HTTP/authorization/decoder errors are never retried here.
                 if(!formatRecovered&&parsing&&!detected.isEmpty()&&!detected.equals(mime)) {
-                    formatRecovered=true;positioned=false;
+                    formatRecovered=true;positioned=false;currentMediaType=detected;
                     player.setMediaItem(new MediaItem.Builder().setUri(source).setMimeType(detected).build());
                     player.prepare();player.play();return;
                 }
@@ -226,7 +229,7 @@ final class NativePlayback {
         long seconds=MediaRateLimit.seconds(waitingLimit.deadline,System.currentTimeMillis());
         waitLabel.setText("Limite temporário do provedor\n"+(seconds>0?"Nova tentativa em "+seconds+" s":"Tentando novamente…"));
     }
-    private void clearWaiting() {waitingLimit=null;if(waitLabel!=null)waitLabel.setVisibility(View.GONE);if(playerView!=null)playerView.setUseController(!activity.isInPictureInPictureMode());}
+    private void clearWaiting() {waitingLimit=null;if(waitLabel!=null)waitLabel.setVisibility(View.GONE);if(playerView!=null)playerView.setUseController(false);}
     private static String failureMessage(PlaybackException error) {
         MediaRateLimit.Limited limited=MediaRateLimit.find(error);
         if(limited!=null)return MediaRateLimit.message(limited,System.currentTimeMillis());
@@ -242,7 +245,7 @@ final class NativePlayback {
             return "O servidor devolveu uma fonte que não pôde ser lida como vídeo. Tente o principal ou o legendado.";
         return "Não foi possível recuperar este vídeo (código "+error.errorCode+"). Tente o principal ou o legendado.";
     }
-    void report(boolean ended) { if(player!=null){if(fullscreen!=null)fullscreen.playing(player.isPlaying());long duration=player.getDuration();listener.progress(Math.max(0,player.getCurrentPosition()/1000d),duration>0?duration/1000d:0,player.isPlaying(),ended);} }
+    void report(boolean ended) { if(player!=null){if(fullscreen!=null&&!(activity instanceof MainActivity&&((MainActivity)activity).isCasting())){fullscreen.playing(player.isPlaying());fullscreen.progress(Math.max(0,player.getCurrentPosition()/1000d),Math.max(0,player.getDuration()/1000d));}long duration=player.getDuration();listener.progress(Math.max(0,player.getCurrentPosition()/1000d),duration>0?duration/1000d:0,player.isPlaying(),ended);} }
     void close(boolean reportPosition) {
         session++;
         if(player==null&&panel==null)return;
@@ -256,9 +259,13 @@ final class NativePlayback {
         if(waitingLimit!=null) {String message=MediaRateLimit.message(waitingLimit,System.currentTimeMillis());close(false);listener.failed(message);}
         else if(player!=null)player.pause();
     }
-    void pip(boolean active) { if(fullscreen!=null)fullscreen.pip(active);if(playerView!=null)playerView.setUseController(!active&&waitingLimit==null); }
+    void pip(boolean active) { if(fullscreen!=null)fullscreen.pip(active);if(playerView!=null)playerView.setUseController(false); }
     boolean isWaiting(){return waitingLimit!=null;}
     boolean isOpen() { return player!=null; }
+    void castPlaying(boolean playing,double position,double duration){if(fullscreen!=null){fullscreen.playing(playing);fullscreen.progress(position,duration);}}
+    void pauseForCast(){if(player!=null)player.pause();}
+    String mediaType(){return currentMediaType;}
+    long durationMs(){return player==null?0:Math.max(0,player.getDuration());}
     long positionMs() { return player==null?0:player.getCurrentPosition(); }
     private int dp(int size) { return Math.round(size*activity.getResources().getDisplayMetrics().density); }
 }

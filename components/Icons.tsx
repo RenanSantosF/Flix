@@ -1,6 +1,7 @@
 import type {CSSProperties} from 'react';
-export type IconName='home'|'search'|'list'|'play'|'plus'|'check'|'back'|'close'|'next'|'pip'|'refresh'|'star'|'chevron'|'clock'|'live';
+export type IconName='home'|'search'|'list'|'play'|'plus'|'check'|'back'|'close'|'next'|'pip'|'refresh'|'star'|'chevron'|'clock'|'live'|'cast';
 const paths:Record<IconName,React.ReactNode>={
+ cast:<><path d="M3 8V4h19v15h-8M2 12a10 10 0 0 1 10 10M2 17a5 5 0 0 1 5 5"/><circle cx="2" cy="22" r=".7"/></>,
  live:<><rect x="2" y="7" width="20" height="14" rx="3"/><path d="m8 2 4 5 4-5"/><path d="m10 11 5 3-5 3Z"/></>,
  home:<><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></>,
  search:<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,

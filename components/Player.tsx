@@ -31,7 +31,7 @@ useEffect(()=>{if(playRequest>0){setStarted(true);setEnded(false)}},[playRequest
 useEffect(()=>{
 if(!started||!initialized.current)return;
 const resume=resumePosition(title,season,episode);lastSave.current=0;setEnded(false);setNotice('');setMediaReady(false);endHandled.current=false;
-window.FlixControl?.postMessage(JSON.stringify({type:'context',key:titleKey(title),season,episode,resume}));
+window.FlixControl?.postMessage(JSON.stringify({type:'context',key:titleKey(title),title:title.title,season,episode,resume}));
 return()=>{window.FlixControl?.postMessage(JSON.stringify({type:'clear'}));};
 },[started,title,season,episode,reload]);
 useEffect(()=>{
@@ -63,7 +63,7 @@ const episodeCount=selected?.episode_count||1;
 
 return <section className="playerSection" id="assistir"><div className="player-heading"><h2>{type==='tv'?'Sua sessão':'Hora de assistir'}</h2><span>{type==='tv'?'T'+season+' · Episódio '+episode:'Prepare a pipoca'}</span></div>
 <div className={'videoFrame'+(started&&!mediaReady?' server-selection':'')} id="player-frame">{!started?<div className="player-cover">{title.backdrop_path&&<img src={imageUrl(title.backdrop_path,'w780')} alt=""/>}<button type="button" aria-label={'Assistir '+title.title} onClick={()=>setStarted(true)}><Icon name="play" size={23}/></button><p>{type==='tv'?'Temporada '+season+' · Episódio '+episode:title.title}</p></div>:<ProviderFrame key={src+":"+reload} src={src} title="Reprodutor SuperFlixAPI" sessionKey={titleKey(title)} season={season} episode={episode} onReconnect={()=>setReload(n=>n+1)}/>}</div>
-{started&&<div className="player-controls">{type==='tv'&&<><button className="button button-glass" disabled={episode<=1} onClick={()=>{setEpisode(e=>Math.max(1,e-1));setEnded(false)}}><Icon name="back" size={16}/>Anterior</button><button className={'button '+(ended&&hasNext?'button-accent':'button-glass')} disabled={!hasNext} onClick={nextEpisode}><Icon name="next" size={16}/>Próximo</button></>}{nativeApp&&<button className="button button-glass pip-button" onClick={floatPlayer}><Icon name="pip" size={17}/>Janela flutuante</button>}<button className="icon-button" aria-label="Recarregar vídeo" title="Recarregar vídeo" onClick={()=>setReload(n=>n+1)}><Icon name="refresh" size={17}/></button></div>}
+{started&&<div className="player-controls">{type==='tv'&&<><button className="button button-glass" disabled={episode<=1} onClick={()=>{setEpisode(e=>Math.max(1,e-1));setEnded(false)}}><Icon name="back" size={16}/>Anterior</button><button className={'button '+(ended&&hasNext?'button-accent':'button-glass')} disabled={!hasNext} onClick={nextEpisode}><Icon name="next" size={16}/>Próximo</button></>}{nativeApp&&<button className="button button-glass" onClick={()=>window.FlixControl?.postMessage(JSON.stringify({type:'cast'}))}><Icon name="cast" size={18}/>Transmitir para TV</button>}{nativeApp&&<button className="button button-glass pip-button" onClick={floatPlayer}><Icon name="pip" size={17}/>Janela flutuante</button>}<button className="icon-button" aria-label="Recarregar vídeo" title="Recarregar vídeo" onClick={()=>setReload(n=>n+1)}><Icon name="refresh" size={17}/></button></div>}
 {notice&&<p className="player-notice" role="status">{notice}</p>}
 {nativeApp&&started&&<PlayerDiagnostic resetKey={src+reload}/>}
 {nativeApp&&started&&<p className="player-status"><i/>Reprodução protegida · use a janela flutuante para assistir em outros apps</p>}

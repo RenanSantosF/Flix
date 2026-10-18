@@ -165,3 +165,23 @@ test('fullscreen controls seek only the addressed finite video and toggle its pl
  f.command({type:'toggle',videoId});assert.equal(f.video.paused,true);f.command({type:'toggle',videoId});assert.equal(f.video.paused,false);
  f.video.duration=Infinity;f.command({type:'seek',videoId,seconds:10});assert.equal(f.video.currentTime,20);
 });
+
+test('cast source is returned only on explicit request for the addressed playable video',()=>{
+ const f=fixture();f.video.src='https://cdn.example/movie.mp4?session=private';f.video.duration=7200;f.video.currentTime=123;f.video.readyState=4;f.video.paused=false;f.emit('playing');const videoId=f.messages.at(-1).videoId;
+ assert.equal(f.messages.filter(m=>m.event==='cast-source').length,0);
+ f.command({type:'cast-source',videoId:'other',token:'one'});assert.equal(f.messages.filter(m=>m.event==='cast-source').length,0);
+ f.command({type:'cast-source',videoId,token:'one'});const reply=f.messages.at(-1);assert.equal(reply.event,'cast-source');assert.equal(reply.source,f.video.src);assert.equal(reply.position,123);assert.equal(reply.token,'one');assert.equal(f.video.loads,0);assert.equal(f.video.plays,0);
+ f.label('Loading ad');f.command({type:'cast-source',videoId,token:'two'});assert.equal(f.messages.at(-1).source,'');
+});
+
+test('a playing blob retains its observed manifest for later cast and discards it on a new load',()=>{
+ const f=fixture();f.video.src='blob:https://player.example/movie';f.resource('https://cdn.example/main.m3u8');f.video.duration=7200;f.video.readyState=4;f.video.currentTime=3;f.video.paused=false;f.emit('playing');const videoId=f.messages.at(-1).videoId;
+ f.advance(90000);f.resource('https://cdn.example/segment.ts');f.command({type:'cast-source',videoId,token:'later'});assert.equal(f.messages.at(-1).source,'https://cdn.example/main.m3u8');
+ f.emit('loadstart');f.command({type:'cast-source',videoId,token:'new'});assert.equal(f.messages.at(-1).source,'');
+});
+
+test('fullscreen seek bar sends a bounded absolute position only to its own video',()=>{
+ const f=fixture();f.video.duration=600;f.video.currentTime=10;f.video.readyState=4;f.emit('playing');const videoId=f.messages.at(-1).videoId;
+ f.command({type:'seek-to',videoId,position:300});assert.equal(f.video.currentTime,300);f.command({type:'seek-to',videoId,position:9999});assert.equal(f.video.currentTime,599.9);f.command({type:'seek-to',videoId,position:-1});assert.equal(f.video.currentTime,599.9);
+ f.command({type:'seek-to',videoId:'other',position:1});assert.equal(f.video.currentTime,599.9);
+});

@@ -8,7 +8,7 @@
       win.__flixMediaObserver = true;
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
       var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
-      var recoveryDelay = 5000, lastAdTime = 0;
+      var recoveryDelay = 5000, lastAdTime = 0, castSources = new WeakMap(), fullscreenControls = new Map(), fullscreenStyle;
       var wantedPlayback = new WeakMap(), browserRetried = new WeakSet(), startedVideos = new WeakSet();
       function retryWanted(video) { return !startedVideos.has(video)&&(wantedPlayback.get(video)===true||!video.paused); }
       function identity(video) {
@@ -111,7 +111,11 @@
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
         if (loadingAdVisible()) {cancelRecovery(video);reportState(video);return;}
-        if(video.readyState>=3&&(video.currentTime>0.1||event==='playing'))startedVideos.add(video);
+        if(video.readyState>=3&&(video.currentTime>0.1||event==='playing')){
+          startedVideos.add(video);
+          var castCandidate=mediaSource(video);
+          if(castCandidate.source)castSources.set(video,{signature:video.currentSrc||video.src||'',source:castCandidate.source,sourceType:castCandidate.sourceType});
+        }
         if (!error && video.readyState < 3) reportState(video);
         if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
         // Give the provider's own error handlers time to replace a temporary source.
@@ -136,7 +140,13 @@
         try {
           var data = JSON.parse(event.data), video = videos[data.videoId];
           if (!video) return;
-          if (data.type === 'retry-source') {
+          if (data.type === 'cast-source' && typeof data.token==='string' && data.token.length<=64) {
+            var selected=mediaSource(video),assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'',saved=castSources.get(video);
+            if(!selected.source&&saved&&saved.signature===(video.currentSrc||video.src||''))selected=saved;
+            if(/^http:\/\//i.test(assigned))selected={source:assigned,sourceType:(video.querySelector('source[src]')||{}).type||''};
+            if(loadingAdVisible()||video.readyState<2)selected={source:'',sourceType:''};
+            win.FlixMedia.postMessage(JSON.stringify({event:'cast-source',token:data.token,videoId:identity(video),source:selected.source,sourceType:selected.sourceType,position:video.currentTime||0,duration:isFinite(video.duration)?video.duration:0}));
+          } else if (data.type === 'retry-source') {
             // Retry the assigned URL in its original document/cookie context only.
             var assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'';
             if(browserRetried.has(video)||video.isConnected===false||assigned!==data.source||!/^https:\/\//i.test(assigned)||video.readyState!==0||video.ended||loadingAdVisible()||!retryWanted(video))return;
@@ -147,6 +157,8 @@
             video.currentTime = Math.max(0, Math.min(data.position, video.duration - 1));
           } else if (data.type === 'toggle') {
             if(video.paused){var play=video.play();if(play&&play.catch)play.catch(function(){});}else video.pause();
+          } else if (data.type === 'seek-to' && isFinite(video.duration) && video.duration>0 && isFinite(data.position) && data.position>=0 && data.position<=604800) {
+            video.currentTime=Math.max(0,Math.min(video.duration-0.1,data.position));
           } else if (data.type === 'seek' && isFinite(video.duration) && video.duration>0 && (data.seconds===10||data.seconds===-10)) {
             video.currentTime=Math.max(0,Math.min(video.duration-0.1,video.currentTime+data.seconds));
           } else if (data.type === 'pause') { wantedPlayback.set(video,false);video.pause(); send(video, 'pause'); }
@@ -160,7 +172,7 @@
             if(event==='ended'||(event==='pause'&&!source.error&&source.networkState!==win.HTMLMediaElement.NETWORK_NO_SOURCE))wantedPlayback.set(source,false);
           }
           if (event === 'emptied' || event === 'loadstart') {
-            if (source instanceof win.HTMLVideoElement) { cancelRecovery(source); failedVideos.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
+            if (source instanceof win.HTMLVideoElement) { cancelRecovery(source); failedVideos.delete(source); castSources.delete(source); epochs.set(source, Math.max(0, win.performance.now() - 250)); }
             return;
           }
           if ((event === 'loadedmetadata' || event === 'playing' || event === 'ended') && source instanceof win.HTMLVideoElement) cancelRecovery(source);
@@ -175,6 +187,14 @@
             }, 300);
           } else send(e.target, event);
         }, true);
+      });
+      win.document.addEventListener('fullscreenchange',function(){
+        var full=win.document.fullscreenElement;
+        fullscreenControls.forEach(function(value,video){if(!full||!(full===video||(full.contains&&full.contains(video)))){video.controls=value;video.removeAttribute('data-flix-fullscreen-controls');fullscreenControls.delete(video);}});
+        if(full){
+          if(!fullscreenStyle){fullscreenStyle=win.document.createElement('style');fullscreenStyle.textContent='video[data-flix-fullscreen-controls]::-webkit-media-controls,video[data-flix-fullscreen-controls]::-webkit-media-controls-enclosure,video[data-flix-fullscreen-controls]::-webkit-media-controls-panel{display:none!important;opacity:0!important;pointer-events:none!important}';(win.document.head||win.document.documentElement).appendChild(fullscreenStyle);}
+          win.document.querySelectorAll('video').forEach(function(video){if(full===video||(full.contains&&full.contains(video))){if(!fullscreenControls.has(video))fullscreenControls.set(video,video.controls);video.setAttribute('data-flix-fullscreen-controls','');video.controls=false;}});
+        }else if(fullscreenStyle){fullscreenStyle.remove();fullscreenStyle=null;}
       });
       function scan() {
         var frameVideos=win.document.querySelectorAll('video');

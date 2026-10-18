@@ -307,3 +307,12 @@ A tela cheia oferece trava de toque, pausa/reprodução e saltos de 10 segundos.
 O histórico começa após progresso real, preserva o episódio anterior se a nova tentativa não iniciar e identifica o próximo episódio preparado ao terminar. O botão de remover usa uma área de toque de 44 px.
 
 O botão de transmissão exibido pelo provedor não representa integração Google Cast do APK. O aplicativo ainda não contém um Cast Sender nativo.
+
+
+### Controles e Google Cast (0.18)
+
+Os controles usam vetores próprios, botão central circular e sobreposição com degradê. A trava exibe somente o botão de desbloquear durante 2,5 s. Depois, um toque apenas revela esse botão; o vídeo continua protegido. Os demais controles somem após 3 s.
+
+Google Cast Sender usa o Default Media Receiver e o seletor nativo de dispositivos na mesma rede Wi-Fi. Há botões próprios nos filmes, séries, canais e tela cheia. O alerta de transmissão indisponível do domínio oficial também abre a integração nativa. Somente a fonte atribuída ao vídeo atual é solicitada ao frame, em resposta a uma ação explícita e com token descartável. Não há requisição extra de teste nem compartilhamento de cookies, referer ou HTML.
+
+A fonte e a posição são enviadas ao receptor. O celular só é pausado após a TV informar reprodução. Fontes blob sem manifesto inequívoco, fontes com autorização restrita ao navegador, CORS ou codecs incompatíveis podem ser recusadas pela TV. Nesses casos, o app informa a falha e permite continuar localmente. A integração de descoberta e reprodução exige validação final em um dispositivo Google Cast físico; os testes automatizados cobrem a ponte, o contexto, os formatos e os controles locais.
