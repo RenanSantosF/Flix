@@ -35,6 +35,7 @@ public class BrowserDiagnosticsTest {
         assertEquals("ReferenceError: adPlayer não definido",BrowserDiagnostics.jsError("ReferenceError: adPlayer is not defined"));
         assertEquals("TypeError: player.play não é função",BrowserDiagnostics.jsError("TypeError: player.play is not a function"));
         assertEquals("SyntaxError: resposta HTML",BrowserDiagnostics.jsError("SyntaxError: Unexpected token '<'"));
+        assertEquals("TypeError",BrowserDiagnostics.jsError("TypeError: https://private.example/secretPath?token=hidden is not a function"));
         BrowserDiagnostics d=new BrowserDiagnostics();d.console("TypeError: Cannot read properties of null (reading 'closed')","https://cdn.example/script.js?token=hidden",17,true);
         String s=d.summary("");assertTrue(s.contains("null.closed"));assertTrue(s.contains("cdn.example:17"));assertFalse(s.contains("script.js"));assertFalse(s.contains("hidden"));
     }

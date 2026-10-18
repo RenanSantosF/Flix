@@ -72,6 +72,7 @@ final class BrowserDiagnostics {
     }
     static String jsError(String message){
         String s=message==null?"":message.substring(0,Math.min(8192,message.length()));
+        s=s.replaceAll("(?i)https?://[^\\s<>\"']+","[URL]");
         Matcher read=Pattern.compile("Cannot read properties of (null|undefined).*?reading ['\"]([A-Za-z_$][A-Za-z0-9_$]{0,40})['\"]").matcher(s);
         if(read.find())return "TypeError: "+read.group(1)+"."+read.group(2);
         Matcher legacy=Pattern.compile("Cannot read property ['\"]([A-Za-z_$][A-Za-z0-9_$]{0,40})['\"] of (null|undefined)").matcher(s);
