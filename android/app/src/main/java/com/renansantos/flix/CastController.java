@@ -65,6 +65,7 @@ final class CastController implements SessionManagerListener<CastSession> {
     private RemoteMediaClient client(){CastSession session=context==null?null:context.getSessionManager().getCurrentCastSession();return session!=null&&session.isConnected()?session.getRemoteMediaClient():null;}
     boolean owns(){return !dead&&owned&&client()!=null;}
     boolean control(String type,int seconds){if(!owns())return false;RemoteMediaClient c=client();if("toggle".equals(type)){if(c.isPlaying())c.pause();else c.play();}else if("seek".equals(type)&&media!=null&&!media.live)c.seek(new MediaSeekOptions.Builder().setPosition(Math.max(0,c.getApproximateStreamPosition()+seconds*1000L)).build());return true;}
+    boolean seekTo(double position){if(!owns()||media==null||media.live||!Double.isFinite(position))return false;client().seek(new MediaSeekOptions.Builder().setPosition((long)(Math.max(0,Math.min(position,604800))*1000)).build());return true;}
     void clear(){key="";media=null;owned=false;accepted=false;requested=false;sent="";}
     void destroy(){dead=true;handler.removeCallbacksAndMessages(null);if(registered!=null)registered.unregisterCallback(callback);if(context!=null)context.getSessionManager().removeSessionManagerListener(this,CastSession.class);executor.shutdown();}
     @Override public void onSessionStarted(CastSession session,String id){if(media!=null)load(session);}

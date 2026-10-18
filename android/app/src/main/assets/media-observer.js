@@ -8,7 +8,7 @@
       win.__flixMediaObserver = true;
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
       var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
-      var recoveryDelay = 5000, lastAdTime = 0, castSources = new WeakMap();
+      var recoveryDelay = 5000, lastAdTime = 0, castSources = new WeakMap(), fullscreenControls = new Map();
       var wantedPlayback = new WeakMap(), browserRetried = new WeakSet(), startedVideos = new WeakSet();
       function retryWanted(video) { return !startedVideos.has(video)&&(wantedPlayback.get(video)===true||!video.paused); }
       function identity(video) {
@@ -157,6 +157,8 @@
             video.currentTime = Math.max(0, Math.min(data.position, video.duration - 1));
           } else if (data.type === 'toggle') {
             if(video.paused){var play=video.play();if(play&&play.catch)play.catch(function(){});}else video.pause();
+          } else if (data.type === 'seek-to' && isFinite(video.duration) && video.duration>0 && isFinite(data.position) && data.position>=0 && data.position<=604800) {
+            video.currentTime=Math.max(0,Math.min(video.duration-0.1,data.position));
           } else if (data.type === 'seek' && isFinite(video.duration) && video.duration>0 && (data.seconds===10||data.seconds===-10)) {
             video.currentTime=Math.max(0,Math.min(video.duration-0.1,video.currentTime+data.seconds));
           } else if (data.type === 'pause') { wantedPlayback.set(video,false);video.pause(); send(video, 'pause'); }
@@ -185,6 +187,11 @@
             }, 300);
           } else send(e.target, event);
         }, true);
+      });
+      win.document.addEventListener('fullscreenchange',function(){
+        var full=win.document.fullscreenElement;
+        fullscreenControls.forEach(function(value,video){if(!full||!(full===video||(full.contains&&full.contains(video)))){video.controls=value;fullscreenControls.delete(video);}});
+        if(full)win.document.querySelectorAll('video').forEach(function(video){if((full===video||(full.contains&&full.contains(video)))&&video.controls){fullscreenControls.set(video,true);video.controls=false;}});
       });
       function scan() {
         var frameVideos=win.document.querySelectorAll('video');

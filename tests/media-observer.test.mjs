@@ -179,3 +179,9 @@ test('a playing blob retains its observed manifest for later cast and discards i
  f.advance(90000);f.resource('https://cdn.example/segment.ts');f.command({type:'cast-source',videoId,token:'later'});assert.equal(f.messages.at(-1).source,'https://cdn.example/main.m3u8');
  f.emit('loadstart');f.command({type:'cast-source',videoId,token:'new'});assert.equal(f.messages.at(-1).source,'');
 });
+
+test('fullscreen seek bar sends a bounded absolute position only to its own video',()=>{
+ const f=fixture();f.video.duration=600;f.video.currentTime=10;f.video.readyState=4;f.emit('playing');const videoId=f.messages.at(-1).videoId;
+ f.command({type:'seek-to',videoId,position:300});assert.equal(f.video.currentTime,300);f.command({type:'seek-to',videoId,position:9999});assert.equal(f.video.currentTime,599.9);f.command({type:'seek-to',videoId,position:-1});assert.equal(f.video.currentTime,599.9);
+ f.command({type:'seek-to',videoId:'other',position:1});assert.equal(f.video.currentTime,599.9);
+});

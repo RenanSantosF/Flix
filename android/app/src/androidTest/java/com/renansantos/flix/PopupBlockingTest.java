@@ -84,19 +84,19 @@ public class PopupBlockingTest {
     @Test public void fullscreenRotatesEvenWhenPortraitIsRequestedAndRestoresOnBack() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()){
             scenario.onActivity(a->a.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT));
-            load(scenario,"<!doctype html><title>Popup test</title><meta name='viewport' content='width=device-width,initial-scale=1'><body style='margin:0'><button style='height:64px;width:100%' onclick=\"var v=document.querySelector('video');v.play();v.requestFullscreen();\">Tela cheia</button><video muted loop playsinline src='data:video/mp4;base64,"+clip()+"'></video>");
+            load(scenario,"<!doctype html><title>Popup test</title><meta name='viewport' content='width=device-width,initial-scale=1'><body style='margin:0'><button style='height:64px;width:100%' onclick=\"var v=document.querySelector('video');v.play();v.requestFullscreen();\">Tela cheia</button><video controls muted loop playsinline src='data:video/mp4;base64,"+clip()+"'></video>");
             waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,100,30);
             long until=SystemClock.uptimeMillis()+10000;java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
             while(SystemClock.uptimeMillis()<until){scenario.onActivity(a->ready.set(a.fullscreenControls()!=null&&a.getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE));if(ready.get())break;SystemClock.sleep(100);}
             assertTrue("Fullscreen should actually rotate to landscape",ready.get());
-            waitForJs(scenario,"document.querySelector('video').currentTime>0.2");
+            waitForJs(scenario,"document.querySelector('video').currentTime>0.2 && !document.querySelector('video').controls");
             clickFullscreenControl(scenario,"Pausar");
             waitForJs(scenario,"document.querySelector('video').paused");
             clickFullscreenControl(scenario,"Reproduzir");
             waitForJs(scenario,"!document.querySelector('video').paused");saveScreenshot("Flix-tela-cheia.png");
             scenario.onActivity(a->{assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,a.getRequestedOrientation());a.onBackPressed();assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,a.getRequestedOrientation());assertNull(a.fullscreenControls());});
-            waitForJs(scenario,"document.querySelector('video').currentTime>0 && !document.querySelector('video').paused");
+            waitForJs(scenario,"document.querySelector('video').currentTime>0 && !document.querySelector('video').paused && document.querySelector('video').controls");
         }
     }
 
@@ -193,7 +193,7 @@ public class PopupBlockingTest {
     @Test public void providerDependencyLoadsAndVideoPlaysWhileItsPopupIsContained() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()) {
             scenario.onActivity(a->a.playerTestBootstrap("window.bootstrapReady=true;window.startProvider=function(){window.open('https://asiafilm.org/ad','_blank');document.querySelector('video').play();};"));
-            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><script src='https://asiafilm.org/flix-player-test.js'></script><body style='margin:0'><button style='height:64px;width:100%' onclick='startProvider()'>Play</button><video muted loop playsinline src='data:video/mp4;base64,"+clip()+"'></video>");
+            load(scenario,"<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><script src='https://asiafilm.org/flix-player-test.js'></script><body style='margin:0'><button style='height:64px;width:100%' onclick='startProvider()'>Play</button><video controls muted loop playsinline src='data:video/mp4;base64,"+clip()+"'></video>");
             waitForJs(scenario,"window.bootstrapReady===true");tap(scenario,50,32);waitForCount(scenario,true,1);
             waitForJs(scenario,"!document.querySelector('video').paused && document.querySelector('video').currentTime>0.2");
             assertEquals("\"Popup test\"",js(scenario,"document.title"));
@@ -230,7 +230,7 @@ public class PopupBlockingTest {
 
     @Test public void reportsRealMediaPositionAndRestoresSavedPosition() throws Exception {
         try (ActivityScenario<MainActivity> scenario = launch()) {
-            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video><script>window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
+            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video controls muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video><script>window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
             waitForJs(scenario, "!!window.FlixControl");
             waitForJs(scenario, "!!window.__flixMediaObserver");
             js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0.65}));true");
@@ -243,7 +243,7 @@ public class PopupBlockingTest {
 
     @Test public void videoContinuesInPictureInPictureWhenLeavingTheApp() throws Exception {
         try (ActivityScenario<MainActivity> scenario = launch()) {
-            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><style>.flix-pip video{position:fixed;inset:0;width:100vw;height:100vh;background:black;}</style><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video>");
+            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><style>.flix-pip video{position:fixed;inset:0;width:100vw;height:100vh;background:black;}</style><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video controls muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video>");
             waitForJs(scenario, "!!window.FlixControl");
             waitForJs(scenario, "!!window.__flixMediaObserver");
             js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0}));true");
@@ -265,7 +265,7 @@ public class PopupBlockingTest {
     @Test public void liveDurationEnablesPipWithoutRestoringVodPosition() throws Exception {
         try (ActivityScenario<MainActivity> scenario = launch()) {
             // Real clip playback, with the infinite duration metadata used by live streams.
-            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video><script>var v=document.querySelector('video');Object.defineProperty(v,'duration',{get:function(){return Infinity;}});window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
+            load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"document.querySelector('video').play()\">Play</button><video controls muted loop playsinline src='data:video/mp4;base64," + clip() + "'></video><script>var v=document.querySelector('video');Object.defineProperty(v,'duration',{get:function(){return Infinity;}});window.lastProgress=null;window.addEventListener('flix:progress',function(e){window.lastProgress=e.detail;});</script>");
             waitForJs(scenario, "!!window.FlixControl && !!window.__flixMediaObserver");
             js(scenario, "FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1,resume:0}));true");
             tap(scenario, 50, 32);

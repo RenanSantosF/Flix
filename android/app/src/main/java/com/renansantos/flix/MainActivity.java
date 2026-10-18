@@ -120,7 +120,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         nativePlayback = new NativePlayback(this, root, this::enterPlayerPip, new NativePlayback.Listener() {
             @Override public void progress(double position,double duration,boolean playing,boolean ended) {
                 if(contextKey.isEmpty()||destroyed||(cast!=null&&cast.owns()))return;
-                playbackActive=playing;if(fullscreenPlayer!=null)fullscreenPlayer.playing(playing);if(playing){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}}root.setKeepScreenOn(playing);updatePipParams();
+                playbackActive=playing;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);}if(playing){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}}root.setKeepScreenOn(playing);updatePipParams();
                 if(playing&&nativeWaitingNotice&&nativePlayback!=null&&!nativePlayback.isWaiting()){nativeWaitingNotice=false;notice("");diagnostic("");}
                 try {
                     JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode)
@@ -139,7 +139,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         cast=new CastController(this,new CastController.Listener(){
             public void message(String text){if(!destroyed){notice(text);android.widget.Toast.makeText(MainActivity.this,text,android.widget.Toast.LENGTH_LONG).show();}}
             public void accepted(){if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.pauseForCast();else localVideoCommand("pause",0);playbackActive=false;root.setKeepScreenOn(false);}
-            public void progress(double position,double duration,boolean playing,boolean ended){if(destroyed||contextKey.isEmpty())return;if(fullscreenPlayer!=null)fullscreenPlayer.playing(playing);if(nativePlayback!=null)nativePlayback.castPlaying(playing);try{JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode).put("position",position).put("duration",duration).put("playing",playing).put("ended",ended);browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:"+event+"}))",null);}catch(Exception ignored){}}
+            public void progress(double position,double duration,boolean playing,boolean ended){if(destroyed||contextKey.isEmpty())return;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);}if(nativePlayback!=null)nativePlayback.castPlaying(playing,position,duration);try{JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode).put("position",position).put("duration",duration).put("playing",playing).put("ended",ended);browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:"+event+"}))",null);}catch(Exception ignored){}}
         },selfTest());
         browser.setWebChromeClient(new WebChromeClient() {
             @Override public boolean onJsAlert(WebView view,String url,String message,android.webkit.JsResult result){
@@ -181,6 +181,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                     public void seek(int seconds){videoCommand("seek",seconds);}
                     public void pip(){enterPlayerPip();}
                     public void cast(){openCast();}
+                    public void seekTo(double seconds){seekVideoTo(seconds);}
                 });
                 root.addView(fullscreenPlayer, new FrameLayout.LayoutParams(-1, -1));
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -401,7 +402,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                     reply.postMessage(restore.toString());
                     return;
                 }
-                playbackActive = playing;if(fullscreenPlayer!=null)fullscreenPlayer.playing(playing);if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
+                playbackActive = playing;if(fullscreenPlayer!=null){fullscreenPlayer.playing(playing);fullscreenPlayer.progress(position,duration);}if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
@@ -595,6 +596,11 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         try{activeReply.postMessage(new JSONObject().put("type","cast-source").put("videoId",activeVideo).put("token",token).toString());}catch(Exception failed){castToken="";castMessage("Não foi possível preparar a transmissão. Tente novamente.");return;}
         handler.postDelayed(()->{if(token.equals(castToken)){castToken="";castMessage("O player não respondeu. Retome o vídeo e tente transmitir novamente.");}},5000);
     }
+    private void seekVideoTo(double position){
+        if(cast!=null&&cast.seekTo(position))return;
+        if(activeReply!=null&&!activeVideo.isEmpty())try{activeReply.postMessage(new JSONObject().put("type","seek-to").put("videoId",activeVideo).put("position",position).toString());}catch(Exception ignored){}
+    }
+    boolean castSeekTo(double position){return cast!=null&&cast.seekTo(position);}
     boolean isCasting(){return cast!=null&&cast.owns();}
     boolean castControl(String type,int seconds){return cast!=null&&cast.control(type,seconds);}
     private void videoCommand(String type,int seconds){
