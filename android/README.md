@@ -1,5 +1,17 @@
 # Flix Android · Recuperação de vídeo
 
+Versão 0.12 (diagnóstico): identifica host, tipo de recurso (quando observado),
+código de conexão Chromium e templates específicos de erro JavaScript. O status
+HTTP é relacionado à fonte atual mesmo sem erro 4. A fonte atribuída ao vídeo
+passa somente à ponte Android local para correlação em memória, sem nova conexão.
+Nenhum endereço completo, query, corpo, cookie, token ou mensagem bruta é exibido.
+Símbolos de erro JavaScript são extraídos por padrões fechados; mensagens não
+reconhecidas mantêm somente o tipo. Origem/linha são obtidas do próprio WebView.
+Logs informativos não se tornam erros JavaScript por conter texto de exceção.
+
+Esta versão melhora a evidência da 0.11, que estava genérica demais para localizar
+o recurso com -6/429 e a exceção. Não altera motor, popup, sessão ou rede do player.
+
 Versão 0.11 (diagnóstico): registra o estágio anterior ao motor nativo. O APK
 mostra após 30 s sem início de reprodução o estado readyState/networkState
 informado pelo vídeo, categorias de erros de console (HTTP misto, CORS, CSP,

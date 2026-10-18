@@ -122,7 +122,7 @@ public final class MainActivity extends Activity {
         });
         browser.setWebChromeClient(new WebChromeClient() {
             @Override public boolean onConsoleMessage(ConsoleMessage message) {
-                if(!contextKey.isEmpty())browserDiagnostics.console(message.message());
+                if(!contextKey.isEmpty())browserDiagnostics.console(message.message(),message.sourceId(),message.lineNumber(),message.messageLevel()==ConsoleMessage.MessageLevel.ERROR);
                 return true; // Do not forward provider URLs/tokens from console messages to logcat.
             }
             @Override public void onProgressChanged(WebView view, int value) {
@@ -181,7 +181,7 @@ public final class MainActivity extends Activity {
                 return null;
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
-                if(!contextKey.isEmpty())browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode());
+                if(!contextKey.isEmpty())browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode(),requestDestination(request),response.getMimeType());
                 if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl()))
                     nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
             }
@@ -193,7 +193,7 @@ public final class MainActivity extends Activity {
                 if (!documentStartObserver && NavigationPolicy.isAppUrl(view.getUrl() == null ? "" : view.getUrl())) view.evaluateJavascript(observerScript, null);
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if(!contextKey.isEmpty())browserDiagnostics.network(error.getErrorCode());
+                if(!contextKey.isEmpty())browserDiagnostics.network(error.getErrorCode(),request.getUrl().toString(),requestDestination(request),String.valueOf(error.getDescription()));
                 if (request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); progress.setVisibility(View.GONE); }
             }
         });
@@ -276,6 +276,7 @@ public final class MainActivity extends Activity {
                 if(pendingRecovery!=null||(nativePlayback!=null&&nativePlayback.isOpen()))return;
                 if("state".equals(data.optString("event"))) {
                     if(data.optBoolean("adLoading",false))browserDiagnostics.adLoading();
+                    browserDiagnostics.source(data.optString("source"),sourceOrigin.toString());
                     browserDiagnostics.state(data.optString("sourceKind"),data.optInt("readyState",-1),data.optInt("networkState",-1));
                     terminalBrowserError=false;if(!stallArmed){sessionStarted=false;scheduleStallDiagnostic(contextGeneration);}return;
                 }
@@ -360,6 +361,10 @@ public final class MainActivity extends Activity {
             String message="Não foi possível concluir a transferência do vídeo. Recarregue para voltar aos servidores.";
             recoveryFailures.put(recoverySource,recoveryDiagnostic+" · transferência não confirmada");notice(message);diagnostic(recoveryFailures.get(recoverySource));
         }},3000);
+    }
+    private static String requestDestination(WebResourceRequest request){
+        for(java.util.Map.Entry<String,String> e:request.getRequestHeaders().entrySet())if("Sec-Fetch-Dest".equalsIgnoreCase(e.getKey()))return e.getValue();
+        return request.isForMainFrame()?"document":"";
     }
     private void scheduleStallDiagnostic(int generation) {
         stallArmed=true;int attempt=++stallGeneration;
