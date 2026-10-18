@@ -48,4 +48,14 @@ final class NavigationPolicy {
                 || "about:blank".equals(value) || "blob".equalsIgnoreCase(scheme) || "data".equalsIgnoreCase(scheme);
         } catch (RuntimeException e) { return false; }
     }
+    static String comparisonUrl(String key,boolean enabled){
+        String suffix=enabled?"&adTest=1":"";
+        if(NavigationPolicy.isPlaybackKey(key)&&(key.startsWith("movie:")||key.startsWith("tv:")))return NavigationPolicy.HOME+"titulo/"+key.replace(':','/')+"?play=1"+suffix;
+        if(NavigationPolicy.isPlaybackKey(key)&&key.startsWith("live:")){
+            String value=key.substring(5);int cut=value.indexOf('-');
+            return NavigationPolicy.HOME+"ao-vivo?tipo="+value.substring(0,cut)+"&id="+value.substring(cut+1)+suffix;
+        }
+        return NavigationPolicy.HOME;
+    }
+
 }
