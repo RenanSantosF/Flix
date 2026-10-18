@@ -113,6 +113,39 @@ public class PopupBlockingTest {
         }
     }
 
+    @Test public void inlineIdentityKeepsServerActionsAndUsesOneControlSetThroughFullscreenAndAds() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            load(scenario,"<!doctype html><title>Popup test</title><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0;padding:18px;background:#0b0b0f;color:white;font-family:system-ui}.servers{display:grid;gap:14px}button{color:white}.fluid_video_wrapper{display:none;position:relative;width:100%;height:320px;background:black;border-radius:20px;overflow:hidden}.fluid_controls_container{position:absolute;bottom:0;background:red;width:100%;height:60px}.fluid_ad_skip{display:none;position:absolute;top:0;background:yellow;color:black}</style><body data-flix-identity-preview><h2>Escolha sua sessão</h2><div class='servers'><button id='primary' onclick=\"window.primaryClicks=(window.primaryClicks||0)+1;document.querySelector('.servers').style.display='none';document.querySelector('h2').textContent='Sua sessão · Flix';document.querySelector('.fluid_video_wrapper').style.display='block';document.querySelector('video').play();\">Servidor Principal</button><button id='alternate' onclick='window.alternateClicks=(window.alternateClicks||0)+1'>Servidor Alternativo</button></div><div class='fluid_video_wrapper'><video controls muted loop playsinline preload='auto' style='width:100%;height:100%;object-fit:contain' src='data:video/mp4;base64,"+clip()+"'></video><div class='fluid_controls_container'>CONTROLES DO PROVEDOR</div><div class='fluid_ad_skip'>Pular anúncio do provedor</div></div>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.__flixPlayerIdentity && document.querySelector('#alternate').getAttribute('data-flix-server')==='alternate'");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");
+            org.json.JSONArray alternate=new org.json.JSONArray(js(scenario,"(function(){var r=document.querySelector('#alternate').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));tap(scenario,alternate.getInt(0),alternate.getInt(1));
+            waitForJs(scenario,"window.alternateClicks===1");saveScreenshot("Flix-servidores-identidade.png");
+            waitForJs(scenario,"document.querySelector('video').readyState>=2 && document.querySelector('video').paused && !document.querySelector('[data-flix-inline-ui]')");
+            org.json.JSONArray primary=new org.json.JSONArray(js(scenario,"(function(){var r=document.querySelector('#primary').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));tap(scenario,primary.getInt(0),primary.getInt(1));
+            waitForJs(scenario,"window.primaryClicks===1 && document.querySelector('video').currentTime>.2 && !!document.querySelector('[data-flix-inline-ui]') && getComputedStyle(document.querySelector('.fluid_controls_container')).display==='none' && !document.querySelector('video').controls");
+            tapInline(scenario,".main");waitForJs(scenario,"document.querySelector('video').paused");
+            js(scenario,"var s=document.querySelector('[data-flix-inline-ui]').shadowRoot.querySelector('input');s.value=500;s.dispatchEvent(new Event('input'));s.dispatchEvent(new Event('change'));true");
+            waitForJs(scenario,"document.querySelector('video').currentTime>.5 && document.querySelector('video').paused");saveScreenshot("Flix-player-identidade.png");
+            js(scenario,"document.querySelector('.fluid_video_wrapper').style.height='180px';window.__flixPlayerIdentity.scan();true");
+            waitForJs(scenario,"(function(){var s=document.querySelector('[data-flix-inline-ui]').shadowRoot;return getComputedStyle(document.querySelector('[data-flix-inline-ui]')).display!=='none' && getComputedStyle(document.querySelector('.fluid_controls_container')).display==='none' && s.querySelector('.main').getBoundingClientRect().bottom<s.querySelector('input').getBoundingClientRect().top})()");saveScreenshot("Flix-player-compacto.png");
+            js(scenario,"document.querySelector('.fluid_video_wrapper').style.height='320px';window.__flixPlayerIdentity.scan();true");
+            tapInline(scenario,".full");waitForJs(scenario,"!!document.fullscreenElement && getComputedStyle(document.querySelector('[data-flix-inline-ui]')).display==='none' && getComputedStyle(document.querySelector('.fluid_controls_container')).display==='none' && !document.querySelector('video').controls");
+            scenario.onActivity(a->{assertNotNull(a.fullscreenControls());a.onBackPressed();});
+            waitForJs(scenario,"!document.fullscreenElement && getComputedStyle(document.querySelector('[data-flix-inline-ui]')).display!=='none' && getComputedStyle(document.querySelector('.fluid_controls_container')).display==='none'");
+            js(scenario,"document.querySelector('.fluid_ad_skip').style.display='block';window.__flixPlayerIdentity.scan();true");
+            waitForJs(scenario,"getComputedStyle(document.querySelector('[data-flix-inline-ui]')).display==='none' && getComputedStyle(document.querySelector('.fluid_ad_skip')).display!=='none' && document.querySelector('video').controls");
+            js(scenario,"document.querySelector('.fluid_ad_skip').style.display='none';window.__flixPlayerIdentity.scan();true");
+            waitForJs(scenario,"getComputedStyle(document.querySelector('[data-flix-inline-ui]')).display!=='none' && !document.querySelector('video').controls");
+        }
+    }
+    private void tapInline(ActivityScenario<MainActivity> scenario,String selector) throws Exception {
+        js(scenario,"document.querySelector('[data-flix-inline-ui]').shadowRoot.querySelector('.surface').click();true");
+        if(".main".equals(selector))saveScreenshot("Flix-player-antes-toque.png");
+        assertEquals("Inline button must own its hit area", "true",js(scenario,"(function(){var host=document.querySelector('[data-flix-inline-ui]'),s=host.shadowRoot,b=s.querySelector("+org.json.JSONObject.quote(selector)+"),r=b.getBoundingClientRect(),hit=s.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&(hit===b||b.contains(hit));})()"));
+        org.json.JSONArray xy=new org.json.JSONArray(js(scenario,"(function(){var r=document.querySelector('[data-flix-inline-ui]').shadowRoot.querySelector("+org.json.JSONObject.quote(selector)+").getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})()"));
+        tap(scenario,xy.getInt(0),xy.getInt(1));
+    }
+
     @Test public void fullscreenLockConsumesVideoTouchesAndBrightnessIsRestored() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()){
             scenario.onActivity(a->{
@@ -526,7 +559,7 @@ public class PopupBlockingTest {
             assertTrue(SystemClock.elapsedRealtime()-start>=2000);
             scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});
             assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());
-            assertEquals("true",js(scenario,"ticks>15 && document.querySelector('video').readyState>=3 && lastNotice===''") );
+            waitForJs(scenario,"ticks>15 && document.querySelector('video').readyState>=3 && lastNotice===''");
             saveScreenshot("Flix-retomada-WebView-429.png");
         }
     }
@@ -560,7 +593,7 @@ public class PopupBlockingTest {
             scenario.onActivity(a->{requests.set(a.testWebRetryCount());held.set(a.testHeldRequests());opens.set(a.nativeOpenCount());interval.set(a.testWebRetryInterval());});
             assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());assertTrue("Provider retry must wait locally",held.get()>=1);
             assertTrue("No second network request before Retry-After: "+interval.get(),interval.get()>=2000);
-            assertEquals("true",js(scenario,"ticks>15 && !stopped && document.querySelector('iframe').contentWindow.document.querySelector('video').readyState>=3"));
+            waitForJs(scenario,"ticks>15 && !stopped && document.querySelector('iframe').contentWindow.document.querySelector('video').readyState>=3");
             saveScreenshot("Flix-espera-da-repeticao-do-provedor.png");
         }
     }

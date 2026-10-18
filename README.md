@@ -61,6 +61,26 @@ sua disponibilidade real.
 
 ## Publicação e validação
 
+### Identidade e descoberta (0.20)
+
+O início consulta mais oito coleções temáticas, elimina repetições entre essas
+coleções e permite explorar sugestões paginadas sem busca. Consultas TMDB têm
+timeout e cache; uma coleção que falha não apaga as demais. Isso amplia as
+opções exibidas, sem afirmar disponibilidade de cada título no provedor.
+
+No Android, a seleção de servidores recebe o tema Flix sem trocar os elementos
+ou seus eventos de clique. Players HTML conhecidos recebem controles próprios
+também antes da tela cheia, isolados em Shadow DOM. Só assumimos o vídeo com
+metadados disponíveis e devolvemos a interface ao provedor durante anúncios.
+Fontes, requisições e o fluxo de preparação do servidor alternativo continuam
+no documento original. No navegador comum, a interface dentro do iframe de
+outro domínio depende de suporte oficial do provedor; CSS da aplicação não
+atravessa essa fronteira.
+
+Cadastro, assinatura e anúncios comerciais ainda não estão ativados. O plano
+de integração e os serviços necessários estão em
+[docs/assinaturas-e-anuncios.md](docs/assinaturas-e-anuncios.md).
+
 Importar o repositório na Vercel e configurar `TMDB_TOKEN` com um Read Access
 Token da TMDB. O token nunca deve ir para o cliente ou para o GitHub.
 `npm test` e `npm run build` (Node.js 22.6+). O workflow Android também executa

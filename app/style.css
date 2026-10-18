@@ -24,3 +24,18 @@
 .player-diagnostic{margin:12px 0;color:var(--muted);font-size:11px;line-height:1.6;border:1px solid var(--line);border-radius:10px;padding:12px 14px}.player-diagnostic summary{cursor:pointer;color:#d4d4df}.player-diagnostic p{margin:10px 0;overflow-wrap:anywhere}.player-diagnostic button{background:#ffffff12;border:1px solid #ffffff22;border-radius:7px;padding:8px 12px;font-size:11px}
 
 .continue-card .remove-history{width:44px;height:44px;top:6px;right:6px;background:#101015e6;border:1px solid #ffffff40}.continue-card .remove-history svg{width:18px;height:18px}.continue-copy p{flex-wrap:wrap;row-gap:5px}
+
+/* Browse in rows, then keep discovering without typing a title. */
+.discovery-grid-section{padding:24px 0 12px;border-top:1px solid var(--line);margin:8px 0 30px}
+.discovery-grid-section .section-heading{align-items:flex-end;margin-bottom:22px}
+.discovery-grid-section .eyebrow{display:block;margin-bottom:10px}
+.discovery-grid-section h2{max-width:520px;text-wrap:balance}
+.discovery-error{color:#e5bd9c;text-align:center;padding:0 var(--gutter);font-size:12px}
+.shelf[id]{scroll-margin-top:90px}
+.playerSection .player-heading h2{font-size:22px}
+.playerSection .videoFrame{border-radius:20px;border-color:#ffffff16;box-shadow:0 16px 50px #0003}
+.player-identity-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border:1px solid #ffffff12;border-bottom:0;border-radius:18px 18px 0 0;background:linear-gradient(115deg,#21131e,#14141c 65%)}
+.player-identity-bar .wordmark{font-size:20px}
+.player-identity-bar>span:last-child{color:#baacba;font-size:10px;letter-spacing:1px}
+.player-identity-bar+.videoFrame{border-top-left-radius:0;border-top-right-radius:0}
+@media(max-width:700px){.discovery-grid-section .section-heading>span{display:none}.discovery-grid-section h2{font-size:21px}.poster-rail{gap:10px}.poster-card{flex-basis:clamp(100px,28vw,150px);width:clamp(100px,28vw,150px)}.discovery-grid-section .poster-grid{gap:18px 10px}.player-identity-bar{padding:12px 14px}}
