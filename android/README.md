@@ -1,33 +1,32 @@
 # Flix Android · Recuperação de vídeo
 
-Versão 0.14: checkbox nativo “Desativar bloqueio de anúncios” abaixo da área do
-app quando um player está aberto. Desmarcado ao iniciar o aplicativo. A troca
-recarrega o título/transmissão; o modo não é persistido após encerrar o processo.
+Versão 0.15: remove o checkbox e o modo sem bloqueios, pois a comparação no
+aparelho também recebeu HTTP 429. A proteção de pop-ups volta a ser permanente.
 
-Marcado: janelas novas são exibidas de verdade, com rede, JavaScript, cookies e
-botão Fechar janela. A abertura é visível antes de iniciar a navegação. Pop-ups
-aninhados seguem o mesmo comportamento e não recebem pontes nativas. HTTP(S),
-redirecionamentos e autoplay passam pelo WebView sem os filtros de navegação do
-Flix; conteúdo misto é permitido durante o teste. Não são alterados certificados
-TLS nem liberado acesso a arquivos locais. Os controles do Android continuam.
+O player alternativo observado no Chrome continha um handler de erro que chama
+load/play novamente sobre a mesma fonte. O console repetiu erro 4 várias vezes
+por segundo enquanto o vídeo permanecia em readyState 0. A espera da versão 0.13
+controlava somente a tentativa do Flix; não segurava as tentativas do provedor.
 
-O modo também remove o script de observação e a ponte de mídia dos novos
-contextos, desliga transferência nativa, retomada, pausa e repetição automáticas.
-A página própria mantém só sua ponte de controle e os diagnósticos passivos de
-console/HTTP. A personalização noLink/noEpList e o referrerPolicy explícito são
-omitidos no player de teste; a lista de episódios é a do próprio provedor.
-PiP e histórico de posição não são atualizados durante essa comparação, por isso
-a interface de teste não oferece o botão de janela flutuante. Favoritos e histórico
-já salvos são preservados. O aviso de 30 s não afirma falha enquanto o observador
-está desligado; o diagnóstico identifica explicitamente o modo de teste.
+Agora, quando o recurso exato de vídeo já recebeu HTTP 429 e foi identificado
+pelo observador, novas solicitações dessa mesma URL aguardam Retry-After no
+worker de requisições do WebView. Ao final, retorna-se null para o Chromium
+continuar a solicitação original: nenhum cliente, URL, Range, cookie, Referer,
+UA ou corpo é substituído. Outros recursos e fontes saudáveis não entram nessa
+espera. A interface Android permanece livre; troca de fonte/contexto, saída do
+app ou destruição cancelam o worker pendente. O prazo máximo aguardado é 5 min.
 
-Desmarcar fecha todas as janelas abertas, restaura filtros e observação e recarrega
-o título. O controle é nativo, não pode ser ativado por scripts de anúncios e
-continua acessível se a página principal navegar para fora do Flix. O botão Voltar
-ao Flix retorna ao conteúdo selecionado. Não existe carregamento de anúncios
-ocultos. Este modo permite comparar as intervenções do Flix; continua sendo um
-WebView e não demonstra, sozinho, a causa do problema do servidor alternativo.
+A tentativa do próprio player e a tentativa agendada pelo Flix compartilham o
+mesmo orçamento: não é enviado load/play extra quando o provedor já aguarda.
+Uma segunda recusa da fonte (ou prazo acima de 5 min) interrompe o iframe e
+exibe Voltar aos servidores, sem novas requisições em loop nem fallback nativo.
+A URL e o prazo ficam somente em memória para correlação; o limite por host
+já existente do motor nativo continua persistido sem URLs/tokens.
 
+Testes incluem um provedor simulado que recarrega o vídeo por conta própria
+após cada erro: 429 -> espera -> H.264 real, e 429 -> espera -> 429 com iframe
+encerrado e app responsivo. Isso corrige a repetição observada; não demonstra
+que o provedor real aceitará a próxima requisição no aparelho.
 
 Versão 0.13: uma fonte que recebe HTTP 429 pode ser retomada uma única vez no
 próprio WebView, após o Retry-After observado (ou 60 s se ele estiver ausente).

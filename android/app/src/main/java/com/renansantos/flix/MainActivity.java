@@ -25,7 +25,6 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -62,17 +61,11 @@ public final class MainActivity extends Activity {
     private double resumePosition;
     private boolean playbackActive, documentStartObserver, destroyed, enteringPip, foreground;
     private JavaScriptReplyProxy activeReply;
-    private volatile boolean unrestrictedTest;
-    private LinearLayout testControls;
-    private CheckBox adBlockingCheckbox;
-    private Button returnToFlix;
-    private ExternalWindows externalWindows;
-    private androidx.webkit.ScriptHandler observerHandle;
-    private WebViewCompat.WebMessageListener mediaListener;
-    private boolean mediaListenerInstalled;
     private NativePlayback nativePlayback;
     private final BrowserDiagnostics browserDiagnostics=new BrowserDiagnostics();
     private final BrowserMediaRetry browserRetry=new BrowserMediaRetry();
+    private final BrowserRequestGate requestGate=new BrowserRequestGate(System::currentTimeMillis);
+    private boolean providerStopped;
     private JavaScriptReplyProxy webRetryReply;
     private String webRetrySource="",webRetryVideo="";
     private Runnable webRetryTask;
@@ -116,8 +109,6 @@ public final class MainActivity extends Activity {
         normal.addView(progress, new FrameLayout.LayoutParams(-1, dp(2), Gravity.TOP));
         createErrorPanel();
         configureBrowser();
-        externalWindows=new ExternalWindows(this,browser.getSettings().getUserAgentString(),()->unrestrictedTest,this::popupFixtureResponse);
-        createTestControls();
         configureMediaBridge();
         nativePlayback = new NativePlayback(this, root, this::enterPlayerPip, new NativePlayback.Listener() {
             @Override public void progress(double position,double duration,boolean playing,boolean ended) {
@@ -140,17 +131,13 @@ public final class MainActivity extends Activity {
         });
         browser.setWebChromeClient(new WebChromeClient() {
             @Override public boolean onConsoleMessage(ConsoleMessage message) {
-                if(!contextKey.isEmpty()){
-                    browserDiagnostics.console(message.message(),message.sourceId(),message.lineNumber(),message.messageLevel()==ConsoleMessage.MessageLevel.ERROR);
-                    if(unrestrictedTest&&message.messageLevel()==ConsoleMessage.MessageLevel.ERROR)diagnostic(testDiagnostic());
-                }
+                if(!contextKey.isEmpty())browserDiagnostics.console(message.message(),message.sourceId(),message.lineNumber(),message.messageLevel()==ConsoleMessage.MessageLevel.ERROR);
                 return true; // Do not forward provider URLs/tokens from console messages to logcat.
             }
             @Override public void onProgressChanged(WebView view, int value) {
                 progress.setProgress(value); progress.setVisibility(value == 100 || isInPictureInPictureMode() ? View.GONE : View.VISIBLE);
             }
             @Override public boolean onCreateWindow(WebView view, boolean dialog, boolean userGesture, Message resultMsg) {
-                if(unrestrictedTest)return externalWindows.open(resultMsg);
                 // Preserve the popup containment that already works on the user's device.
                 blockedPopups.incrementAndGet();
                 WebView sink = new WebView(MainActivity.this);
@@ -171,7 +158,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) { callback.onCustomViewHidden(); return; }
-                customView = view; customViewCallback = callback;updateTestControls();
+                customView = view; customViewCallback = callback;
                 normal.setVisibility(View.GONE); root.setPadding(0, 0, 0, 0);
                 root.addView(view, new FrameLayout.LayoutParams(-1, -1));
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -182,7 +169,6 @@ public final class MainActivity extends Activity {
         browser.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                if(unrestrictedTest)return false;
                 boolean allowed = request.isForMainFrame() ? NavigationPolicy.isAppUrl(url) : NavigationPolicy.canLoadSubframe(url);
                 if (!allowed) {noteBlockedNavigation();if(!request.isForMainFrame()&&!contextKey.isEmpty())browserDiagnostics.blockedFrame(request.getUrl().getScheme());}
                 return !allowed;
@@ -192,8 +178,10 @@ public final class MainActivity extends Activity {
                 // Instrumentation uses a real HTTPS document origin, without weakening media checks.
                 if (selfTest() && testHtml != null && request.isForMainFrame() && (NavigationPolicy.HOME + "android-test").equals(url))
                     return new WebResourceResponse("text/html", "UTF-8", new ByteArrayInputStream(testHtml.getBytes(StandardCharsets.UTF_8)));
-                if (!unrestrictedTest&&NavigationPolicy.blockNetworkRequest(url,request.isForMainFrame())) { noteBlockedNavigation(); return emptyResponse(); }
-                if(selfTest()&&"https://outside.example/flix-test".equals(url))return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream("<!doctype html><title>External test</title><p>External page</p>".getBytes(StandardCharsets.UTF_8)));
+                if (NavigationPolicy.blockNetworkRequest(url,request.isForMainFrame())) { noteBlockedNavigation(); return emptyResponse(); }
+                if(!request.isForMainFrame()&&!requestGate.await(url,()->handler.post(()->{
+                    if(!destroyed&&!contextKey.isEmpty())diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · repetição do provedor aguardando Retry-After no WebView · "+browserDiagnostics.summary(""));
+                })))return emptyResponse();
                 if(selfTest()&&testBootstrap!=null&&"https://asiafilm.org/flix-player-test.js".equals(url))
                     return new WebResourceResponse("application/javascript","UTF-8",new ByteArrayInputStream(testBootstrap.getBytes(StandardCharsets.UTF_8)));
                 if(selfTest()&&testManifest!=null&&(NavigationPolicy.HOME+"test-stream.m3u8").equals(url))
@@ -209,31 +197,25 @@ public final class MainActivity extends Activity {
                 return null;
             }
             @Override public void onReceivedHttpError(WebView view,WebResourceRequest request,WebResourceResponse response) {
-                if(!contextKey.isEmpty()){
-                    browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode(),requestDestination(request),response.getMimeType());
-                    if(unrestrictedTest){diagnostic(testDiagnostic());return;}
-                }
+                if(!contextKey.isEmpty())browserDiagnostics.http(request.getUrl().toString(),response.getStatusCode(),requestDestination(request),response.getMimeType());
                 if(nativePlayback!=null&&response.getStatusCode()==429&&NavigationPolicy.isAppUrl(browser.getUrl()==null?"":browser.getUrl())) {
                     MediaRateLimit.Deadline deadline=nativePlayback.browserLimited(request.getUrl().toString(),response.getResponseHeaders());
-                    if(!contextKey.isEmpty()){browserRetry.limited(request.getUrl().toString(),deadline);scheduleWebRetry();}
+                    if(!contextKey.isEmpty()){
+                        String url=request.getUrl().toString();browserRetry.limited(url,deadline);
+                        if(requestGate.limited(url,deadline))stopLimitedProvider();else scheduleWebRetry();
+                    }
                 }
             }
             @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap icon) {
-                if (NavigationPolicy.isAppUrl(url)) {
-                    if(!unrestrictedTest&&"1".equals(android.net.Uri.parse(url).getQueryParameter("adTest"))){view.stopLoading();view.loadUrl(NavigationPolicy.HOME);return;}
-                    lastAppUrl = url; errorPanel.setVisibility(View.GONE); clearPlaybackContext();
-                }
-                else if (!unrestrictedTest&&!"about:blank".equals(url)) { view.stopLoading(); noteBlockedNavigation(); view.loadUrl(lastAppUrl); }
+                if (NavigationPolicy.isAppUrl(url)) { lastAppUrl = url; errorPanel.setVisibility(View.GONE); clearPlaybackContext(); }
+                else if (!"about:blank".equals(url)) { view.stopLoading(); noteBlockedNavigation(); view.loadUrl(lastAppUrl); }
             }
             @Override public void onPageFinished(WebView view, String url) {
-                if (!unrestrictedTest&&!documentStartObserver && NavigationPolicy.isAppUrl(view.getUrl() == null ? "" : view.getUrl())) view.evaluateJavascript(observerScript, null);
+                if (!documentStartObserver && NavigationPolicy.isAppUrl(view.getUrl() == null ? "" : view.getUrl())) view.evaluateJavascript(observerScript, null);
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if(!contextKey.isEmpty()){
-                    browserDiagnostics.network(error.getErrorCode(),request.getUrl().toString(),requestDestination(request),String.valueOf(error.getDescription()));
-                    if(unrestrictedTest)diagnostic(testDiagnostic());
-                }
-                if (!unrestrictedTest&&request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); progress.setVisibility(View.GONE); }
+                if(!contextKey.isEmpty())browserDiagnostics.network(error.getErrorCode(),request.getUrl().toString(),requestDestination(request),String.valueOf(error.getDescription()));
+                if (request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); progress.setVisibility(View.GONE); }
             }
         });
         browser.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> noteBlockedNavigation());
@@ -291,22 +273,20 @@ public final class MainActivity extends Activity {
                     String path = android.net.Uri.parse(browser.getUrl() == null ? "" : browser.getUrl()).getPath();
                     boolean test = BuildConfig.DEBUG && getIntent().getBooleanExtra(EXTRA_SELF_TEST, false);
                     if (!test && !NavigationPolicy.matchesPlaybackPath(key, path)) return;
-                    if(unrestrictedTest&&!test&&!"1".equals(android.net.Uri.parse(browser.getUrl()).getQueryParameter("adTest"))){browser.loadUrl(NavigationPolicy.comparisonUrl(key,true));return;}
                     clearPlaybackContext(); contextKey = key;
                     contextSeason = Math.max(0, Math.min(10000, data.optInt("season", 1)));
                     contextEpisode = Math.max(1, Math.min(10000, data.optInt("episode", 1)));
                     double position = data.optDouble("resume", 0);
                     resumePosition = !key.startsWith("live:") && Double.isFinite(position) ? Math.max(0, Math.min(604800, position)) : 0;
-                    updateTestControls();
-                    if(unrestrictedTest)diagnostic(testDiagnostic());else scheduleStallDiagnostic(contextGeneration);
+                    scheduleStallDiagnostic(contextGeneration);
                 }
             } catch (Exception ignored) { }
         });
         // Frames report bounded media state and, on error 4 only, their assigned media URL.
         // Only the local decoder can use that URL; no URL or cookie is forwarded to the website.
-        mediaListener=(view, message, sourceOrigin, mainFrame, reply) -> {
+        WebViewCompat.addWebMessageListener(browser, "FlixMedia", Collections.singleton("*"), (view, message, sourceOrigin, mainFrame, reply) -> {
             if (BuildConfig.DEBUG) { mediaMessages++; lastMediaOrigin = sourceOrigin.toString(); }
-            if (unrestrictedTest || contextKey.isEmpty() || destroyed || NavigationPolicy.isAdUrl(sourceOrigin.toString())) return;
+            if (contextKey.isEmpty() || destroyed || providerStopped || NavigationPolicy.isAdUrl(sourceOrigin.toString())) return;
             if (!NavigationPolicy.isAppUrl(browser.getUrl() == null ? "" : browser.getUrl())) return;
             if (!"https".equals(sourceOrigin.getScheme())) return;
             try {
@@ -318,6 +298,8 @@ public final class MainActivity extends Activity {
                 if("state".equals(data.optString("event"))) {
                     if(data.optBoolean("adLoading",false))browserDiagnostics.adLoading();
                     browserDiagnostics.source(data.optString("source"),sourceOrigin.toString());
+                    requestGate.source(data.optBoolean("adLoading",false)?"":data.optString("source"));
+                    if(requestGate.terminal()){stopLimitedProvider();return;}
                     browserDiagnostics.state(data.optString("sourceKind"),data.optInt("readyState",-1),data.optInt("networkState",-1));
                     observeWebRetry(data,reply);
                     terminalBrowserError=false;if(!stallArmed){sessionStarted=false;scheduleStallDiagnostic(contextGeneration);}return;
@@ -383,59 +365,11 @@ public final class MainActivity extends Activity {
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
             } catch (Exception ignored) { }
-        };
-        setMediaObservation(true);
-    }
-
-    private void createTestControls(){
-        testControls=new LinearLayout(this);testControls.setOrientation(LinearLayout.VERTICAL);testControls.setPadding(dp(10),dp(4),dp(10),dp(4));testControls.setBackgroundColor(Color.rgb(25,25,32));
-        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
-        adBlockingCheckbox=new CheckBox(this);adBlockingCheckbox.setText("Desativar bloqueio de anúncios");adBlockingCheckbox.setTextSize(13);adBlockingCheckbox.setTextColor(Color.WHITE);
-        adBlockingCheckbox.setButtonTintList(android.content.res.ColorStateList.valueOf(Color.rgb(244,63,98)));
-        row.addView(adBlockingCheckbox,new LinearLayout.LayoutParams(0,-1,1));
-        returnToFlix=new Button(this);returnToFlix.setText("Voltar ao Flix");returnToFlix.setTextSize(11);returnToFlix.setOnClickListener(v->reloadComparison());row.addView(returnToFlix,new LinearLayout.LayoutParams(-2,-1));
-        testControls.addView(row,new LinearLayout.LayoutParams(-1,dp(48)));
-        TextView hint=new TextView(this);hint.setText("Teste temporário · o player recarrega ao alternar");hint.setTextColor(Color.LTGRAY);hint.setTextSize(11);testControls.addView(hint);
-        normal.addView(testControls,new FrameLayout.LayoutParams(-1,dp(82),Gravity.BOTTOM));
-        adBlockingCheckbox.setOnCheckedChangeListener((button,checked)->{
-            if(unrestrictedTest==checked)return;
-            String target=NavigationPolicy.comparisonUrl(contextKey,checked);unrestrictedTest=checked;
-            clearPlaybackContext();externalWindows.closeAll();
-            for(WebView sink:popupSinks)sink.destroy();popupSinks.clear();
-            browser.getSettings().setMixedContentMode(checked?WebSettings.MIXED_CONTENT_ALWAYS_ALLOW:WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-            browser.getSettings().setMediaPlaybackRequiresUserGesture(!checked);
-            browser.setDownloadListener(checked?null:(url,agent,disposition,mime,size)->noteBlockedNavigation());
-            setMediaObservation(!checked);updateTestControls();
-            browser.stopLoading();browser.loadUrl(selfTest()?NavigationPolicy.HOME+"android-test":target);
         });
-        updateTestControls();
-    }
-    private void updateTestControls(){
-        if(testControls==null)return;
-        boolean show=(!contextKey.isEmpty()||unrestrictedTest)&&customView==null&&!isInPictureInPictureMode();
-        testControls.setVisibility(show?View.VISIBLE:View.GONE);returnToFlix.setVisibility(unrestrictedTest?View.VISIBLE:View.GONE);
-        FrameLayout.LayoutParams layout=(FrameLayout.LayoutParams)browser.getLayoutParams();layout.bottomMargin=show?dp(82):0;browser.setLayoutParams(layout);
-    }
-    private void reloadComparison(){browser.loadUrl(selfTest()?NavigationPolicy.HOME+"android-test":NavigationPolicy.comparisonUrl(contextKey,unrestrictedTest));}
-    @SuppressLint("RequiresFeature") private void setMediaObservation(boolean enabled){
-        if(!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)||mediaListener==null)return;
-        if(enabled){
-            if(!mediaListenerInstalled){WebViewCompat.addWebMessageListener(browser,"FlixMedia",Collections.singleton("*"),mediaListener);mediaListenerInstalled=true;}
-            if(WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)&&observerHandle==null){observerHandle=WebViewCompat.addDocumentStartJavaScript(browser,observerScript,Collections.singleton("*"));documentStartObserver=true;}
-        }else{
-            if(mediaListenerInstalled){WebViewCompat.removeWebMessageListener(browser,"FlixMedia");mediaListenerInstalled=false;}
-            if(observerHandle!=null){observerHandle.remove();observerHandle=null;}documentStartObserver=false;
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(browser, observerScript, Collections.singleton("*")); documentStartObserver = true;
         }
     }
-    private String testDiagnostic(){return "Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · teste sem bloqueios do Flix · sem observador, retomada ou motor nativo · "+browserDiagnostics.summary("");}
-    private WebResourceResponse popupFixtureResponse(WebResourceRequest request){
-        if(selfTest()&&(NavigationPolicy.HOME+"test-popup-page").equals(request.getUrl().toString()))return new WebResourceResponse("text/html","UTF-8",new ByteArrayInputStream("<!doctype html><title>Popup loaded</title><script>window.opener.postMessage('popup-loaded','https://flix-ebon-ten.vercel.app')</script>Janela de teste".getBytes(StandardCharsets.UTF_8)));
-        return null;
-    }
-    void toggleAdTest(){if(!selfTest())throw new IllegalStateException("Debug fixture only");adBlockingCheckbox.performClick();}
-    boolean isAdTest(){return unrestrictedTest;}
-    int externalWindowCount(){return externalWindows.count();}
-    boolean externalWindowsVisible(){return externalWindows.allVisible();}
 
     private void cancelWebRetry() {
         if(webRetryTask!=null)handler.removeCallbacks(webRetryTask);
@@ -450,7 +384,7 @@ public final class MainActivity extends Activity {
         webRetrySource=source;webRetryVideo=video;webRetryReply=reply;scheduleWebRetry();
     }
     private void scheduleWebRetry() {
-        if(unrestrictedTest||webRetryTask!=null||webRetryReply==null||destroyed||!foreground||contextKey.isEmpty()||pendingRecovery!=null||nativePlayback.isOpen())return;
+        if(webRetryTask!=null||webRetryReply==null||destroyed||!foreground||contextKey.isEmpty()||pendingRecovery!=null||nativePlayback.isOpen())return;
         long wait=browserRetry.waitMillis(webRetrySource,System.currentTimeMillis());if(wait<0)return;
         final int generation=contextGeneration;final String source=webRetrySource,video=webRetryVideo;final JavaScriptReplyProxy reply=webRetryReply;
         notice("O provedor limitou esta fonte (HTTP 429). Nova tentativa no player em "+Math.max(1,(wait+999)/1000)+" s.");
@@ -460,6 +394,10 @@ public final class MainActivity extends Activity {
             long remaining=browserRetry.waitMillis(source,System.currentTimeMillis());
             if(remaining>0){scheduleWebRetry();return;}
             if(!browserRetry.consume(source,System.currentTimeMillis()))return;
+            if(requestGate.ownsRetry(source)){
+                notice("A fonte está sendo retomada pelo próprio player após a espera do HTTP 429.");return;
+            }
+            requestGate.appRetry(source);
             try {
                 browserDiagnostics.retry(source);
                 reply.postMessage(new JSONObject().put("type","retry-source").put("videoId",video).put("source",source).toString());
@@ -471,6 +409,16 @@ public final class MainActivity extends Activity {
         handler.postDelayed(webRetryTask,Math.max(1,wait));
     }
 
+    private void stopLimitedProvider() {
+        if(providerStopped||destroyed||contextKey.isEmpty())return;
+        providerStopped=true;terminalBrowserError=true;cancelWebRetry();requestGate.source("");
+        playbackActive=false;root.setKeepScreenOn(false);
+        notice("O provedor mantém esta fonte limitada (HTTP 429). As repetições foram interrompidas. Selecione outro servidor ou tente mais tarde.");
+        diagnostic("Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · HTTP 429 persistente ou espera longa · repetições do provedor interrompidas · "+browserDiagnostics.summary(""));
+        try{JSONObject detail=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode);
+            browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:provider-limited',{detail:"+detail+"}))",null);
+        }catch(Exception ignored){}
+    }
     private void nativeSession(boolean active) {
         if(destroyed||contextKey.isEmpty())return;
         try {JSONObject detail=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode).put("active",active);
@@ -501,7 +449,7 @@ public final class MainActivity extends Activity {
     private void scheduleStallDiagnostic(int generation) {
         stallArmed=true;int attempt=++stallGeneration;
         handler.postDelayed(()->{
-            if(unrestrictedTest||destroyed||!foreground||webRetryTask!=null||contextGeneration!=generation||stallGeneration!=attempt||terminalBrowserError||contextKey.isEmpty()||sessionStarted||stallNotice||pendingRecovery!=null||nativePlayback.isOpen()||!recoveryFailures.isEmpty())return;
+            if(destroyed||!foreground||webRetryTask!=null||contextGeneration!=generation||stallGeneration!=attempt||terminalBrowserError||contextKey.isEmpty()||sessionStarted||stallNotice||pendingRecovery!=null||nativePlayback.isOpen()||!recoveryFailures.isEmpty())return;
             android.content.pm.PackageInfo engine=WebView.getCurrentWebViewPackage();
             String text="Flix "+BuildConfig.VERSION_NAME+" ("+BuildConfig.VERSION_CODE+") · WebView "+(engine==null?"?":engine.versionName)
                 +" · sem reprodução após 30 s · "+browserDiagnostics.summary("");
@@ -509,11 +457,11 @@ public final class MainActivity extends Activity {
         },stallDelayMs);
     }
     private void clearPlaybackContext() {
-        cancelWebRetry();browserRetry.clear();contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
+        cancelWebRetry();browserRetry.clear();requestGate.clear();providerStopped=false;contextGeneration++;stallGeneration++;terminalBrowserError=false;sessionStarted=false;stallNotice=false;stallArmed=false;browserDiagnostics.clear();
         pendingRecovery=null;pendingToken="";
         if(nativePlayback!=null)nativePlayback.close(false);
         recoveredSources.clear(); recoveryFailures.clear(); nativeWaitingNotice=false; recoverySource=""; recoveryDiagnostic = ""; diagnostic("");
-        contextKey = ""; activeVideo = ""; activeReply = null; resumePosition = 0; playbackActive = false;updateTestControls();
+        contextKey = ""; activeVideo = ""; activeReply = null; resumePosition = 0; playbackActive = false;
         restoredVideos.clear(); root.setKeepScreenOn(false); updatePipParams();
     }
     private String recoveryReason(JSONObject data, String source) {
@@ -577,18 +525,18 @@ public final class MainActivity extends Activity {
     }
     @Override public void onPictureInPictureModeChanged(boolean inPip, Configuration config) {
         super.onPictureInPictureModeChanged(inPip, config);
-        enteringPip = false;updateTestControls();
+        enteringPip = false;
         progress.setVisibility(View.GONE);
         if (inPip) { root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
         else { restoreInlineLayout(); root.requestApplyInsets(); }
     }
-    @Override protected void onStart() {super.onStart();foreground=true;if(nativePlayback!=null)nativePlayback.visible();}
+    @Override protected void onStart() {super.onStart();foreground=true;requestGate.visible(true);if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
-        super.onStop();foreground=false;
-        if(!unrestrictedTest&&webRetryReply!=null)try{webRetryReply.postMessage(new JSONObject().put("type","pause").put("videoId",webRetryVideo).toString());}catch(Exception ignored){}
+        super.onStop();foreground=false;requestGate.visible(false);
+        if(webRetryReply!=null)try{webRetryReply.postMessage(new JSONObject().put("type","pause").put("videoId",webRetryVideo).toString());}catch(Exception ignored){}
         cancelWebRetry();
         if (!enteringPip && !isInPictureInPictureMode()) {if(pendingRecovery!=null)nativeSession(false);pendingRecovery=null;pendingToken="";if(nativePlayback!=null)nativePlayback.pause();}
-        if (!enteringPip && !isInPictureInPictureMode() && !unrestrictedTest && activeReply != null) {
+        if (!enteringPip && !isInPictureInPictureMode() && activeReply != null) {
             try { activeReply.postMessage(new JSONObject().put("type", "pause").put("videoId", activeVideo).toString()); } catch (Exception ignored) { }
         }
     }
@@ -597,17 +545,16 @@ public final class MainActivity extends Activity {
     private void noteBlockedNavigation() { blockedNavigations.incrementAndGet(); }
     private void exitFullscreen() {
         if (customView == null) return;
-        root.removeView(customView); customView = null; normal.setVisibility(View.VISIBLE);updateTestControls();
+        root.removeView(customView); customView = null; normal.setVisibility(View.VISIBLE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE); root.requestApplyInsets(); updatePipParams();
         if (customViewCallback != null) { customViewCallback.onCustomViewHidden(); customViewCallback = null; }
     }
     @Override public void onBackPressed() { if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.close(true); else if (customView != null) exitFullscreen(); else if (browser.canGoBack()) browser.goBack(); else super.onBackPressed(); }
     @Override protected void onSaveInstanceState(Bundle outState) { browser.saveState(outState); super.onSaveInstanceState(outState); }
     @Override protected void onDestroy() {
-        destroyed = true;cancelWebRetry();pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);
+        destroyed = true;requestGate.clear();cancelWebRetry();pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);
         for (WebView sink : popupSinks) sink.destroy(); popupSinks.clear();
         if(nativePlayback!=null)nativePlayback.close(false);
-        if(externalWindows!=null)externalWindows.closeAll();
         browser.stopLoading(); browser.destroy(); super.onDestroy();
     }
     void playerTestBootstrap(String script) {if(!selfTest())throw new IllegalStateException("Debug fixture only");testBootstrap=script;}
@@ -660,6 +607,7 @@ public final class MainActivity extends Activity {
     int browserPullCount(){return testBrowserPulls.get();}int browserLimitCount(){return testBrowserLimits.get();}int sharedNativePullCount(){return testSharedNativePulls.get();}
     void testWebRetryClip(byte[] clip,boolean alwaysLimited){if(!selfTest())throw new IllegalStateException("Debug fixture only");testWebClip=clip;testWebAlwaysLimited=alwaysLimited;}
     int testWebRetryCount(){return testWebRequests.get();}
+    int testHeldRequests(){return requestGate.held();}
     void testStallDelay(int millis){if(!selfTest())throw new IllegalStateException("Debug fixture only");stallDelayMs=millis;}
     int nativeOpenCount(){return testNativeOpens;}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
