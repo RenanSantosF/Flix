@@ -12,8 +12,13 @@ final class BrowserMediaRetry {
         if(!MediaUrlPolicy.allowed(source)||deadline==null)return;
         source=key(source);
         if(limits.size()>=32&&!limits.containsKey(source))limits.remove(limits.keySet().iterator().next());
-        MediaRateLimit.Deadline old=limits.get(source);
-        if(old==null||old.until<deadline.until)limits.put(source,deadline);
+        String host=java.net.URI.create(source).getHost();
+        for(java.util.Map.Entry<String,MediaRateLimit.Deadline> entry:limits.entrySet())
+            if(host.equalsIgnoreCase(java.net.URI.create(entry.getKey()).getHost())&&entry.getValue().until>deadline.until)deadline=entry.getValue();
+        // A later response on this host must also postpone an already scheduled URL.
+        for(java.util.Map.Entry<String,MediaRateLimit.Deadline> entry:limits.entrySet())
+            if(host.equalsIgnoreCase(java.net.URI.create(entry.getKey()).getHost()))entry.setValue(deadline);
+        limits.put(source,deadline);
     }
     boolean isLimited(String source){return limits.containsKey(key(source));}
     long waitMillis(String source,long now){
