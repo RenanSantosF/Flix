@@ -296,3 +296,14 @@ e incrementar `versionCode`. Nunca publicar esse backup no GitHub.
 O workflow também fornece `output/apksigner.jar` para verificar e assinar.
 A primeira migração da versão 0.1 exige desinstalar a assinatura antiga;
 atualizações assinadas com a identidade persistente preservam os dados.
+
+
+### Conforto de reprodução (0.17)
+
+Ao abrir a tela cheia, o aplicativo solicita paisagem com sensor e restaura a orientação anterior ao sair. Isso se aplica à superfície original do WebView e à recuperação Media3, sem recarregar a página. Em PiP, os controles ficam ocultos e a orientação é liberada até voltar ao vídeo.
+
+A tela cheia oferece trava de toque, pausa/reprodução e saltos de 10 segundos. Deslizar verticalmente no quinto esquerdo ajusta apenas o brilho desta janela; no quinto direito, o volume de mídia. O brilho original volta ao sair. O meio continua disponível para os controles do provedor.
+
+O histórico começa após progresso real, preserva o episódio anterior se a nova tentativa não iniciar e identifica o próximo episódio preparado ao terminar. O botão de remover usa uma área de toque de 44 px.
+
+O botão de transmissão exibido pelo provedor não representa integração Google Cast do APK. O aplicativo ainda não contém um Cast Sender nativo.

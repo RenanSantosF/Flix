@@ -7,7 +7,6 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.webkit.CookieManager;
-import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -57,8 +56,9 @@ final class NativePlayback {
     private final Listener listener;
     private final Runnable pip;
     private ExoPlayer player;
-    private LinearLayout panel, toolbar;
+    private LinearLayout panel;
     private PlayerView playerView;
+    private FullscreenPlayerLayout fullscreen;
     private TextView waitLabel;
     private int session;
     private boolean foreground=true;
@@ -130,17 +130,15 @@ final class NativePlayback {
         androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF);
         if(!MediaUrlPolicy.allowed(source))return;
         panel=new LinearLayout(activity);panel.setOrientation(LinearLayout.VERTICAL);panel.setBackgroundColor(Color.BLACK);
-        toolbar=new LinearLayout(activity);toolbar.setGravity(Gravity.CENTER_VERTICAL);toolbar.setPadding(dp(8),0,dp(8),0);
-        toolbar.setBackgroundColor(Color.rgb(11,11,15));
-        Button back=new Button(activity);back.setText("Voltar");back.setContentDescription("Voltar ao player");back.setOnClickListener(v->close(true));
-        TextView title=new TextView(activity);title.setText("FLIX ·");title.setTextColor(Color.WHITE);title.setTextSize(18);title.setGravity(Gravity.CENTER);
-        Button floating=new Button(activity);floating.setText("Janela flutuante");floating.setOnClickListener(v->pip.run());
-        toolbar.addView(back,new LinearLayout.LayoutParams(-2,-1));toolbar.addView(title,new LinearLayout.LayoutParams(0,-1,1));toolbar.addView(floating,new LinearLayout.LayoutParams(-2,-1));
-        panel.addView(toolbar,new LinearLayout.LayoutParams(-1,dp(52)));
         waitLabel=new TextView(activity);waitLabel.setTextColor(Color.LTGRAY);waitLabel.setTextSize(17);waitLabel.setGravity(Gravity.CENTER);
         waitLabel.setPadding(dp(20),dp(24),dp(20),dp(24));waitLabel.setVisibility(View.GONE);panel.addView(waitLabel,new LinearLayout.LayoutParams(-1,-2));
         playerView=new PlayerView(activity);playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
-        panel.addView(playerView,new LinearLayout.LayoutParams(-1,0,1));root.addView(panel,new FrameLayout.LayoutParams(-1,-1));
+        panel.addView(playerView,new LinearLayout.LayoutParams(-1,0,1));fullscreen=new FullscreenPlayerLayout(activity,panel,new FullscreenPlayerLayout.Actions(){
+            public void exit(){close(true);}
+            public void pip(){pip.run();}
+            public void toggle(){if(player!=null){if(player.isPlaying())player.pause();else player.play();}}
+            public void seek(int seconds){if(player!=null&&!player.isCurrentMediaItemLive()&&player.getDuration()>0)player.seekTo(Math.max(0,Math.min(player.getDuration()-1,player.getCurrentPosition()+seconds*1000L)));}
+        });root.addView(fullscreen,new FrameLayout.LayoutParams(-1,-1));
         final MediaFormatProbe format=new MediaFormatProbe();
         DataSource.Factory requests=testSource!=null?testSource:network(context,userAgent);
         DefaultMediaSourceFactory sources=new DefaultMediaSourceFactory(observeFormat(requests,source,format));
@@ -244,13 +242,13 @@ final class NativePlayback {
             return "O servidor devolveu uma fonte que não pôde ser lida como vídeo. Tente o principal ou o legendado.";
         return "Não foi possível recuperar este vídeo (código "+error.errorCode+"). Tente o principal ou o legendado.";
     }
-    void report(boolean ended) { if(player!=null){long duration=player.getDuration();listener.progress(Math.max(0,player.getCurrentPosition()/1000d),duration>0?duration/1000d:0,player.isPlaying(),ended);} }
+    void report(boolean ended) { if(player!=null){if(fullscreen!=null)fullscreen.playing(player.isPlaying());long duration=player.getDuration();listener.progress(Math.max(0,player.getCurrentPosition()/1000d),duration>0?duration/1000d:0,player.isPlaying(),ended);} }
     void close(boolean reportPosition) {
         session++;
         if(player==null&&panel==null)return;
         handler.removeCallbacks(ticker);
         if(player!=null){if(reportPosition)report(false);ExoPlayer old=player;player=null;playerView.setPlayer(null);old.release();}
-        if(panel!=null){root.removeView(panel);panel=null;}toolbar=null;playerView=null;waitLabel=null;waitingLimit=null;listener.closed();
+        if(fullscreen!=null){fullscreen.release();root.removeView(fullscreen);fullscreen=null;root.requestApplyInsets();}panel=null;playerView=null;waitLabel=null;waitingLimit=null;listener.closed();
     }
     void visible(){foreground=true;}
     void pause() {
@@ -258,7 +256,7 @@ final class NativePlayback {
         if(waitingLimit!=null) {String message=MediaRateLimit.message(waitingLimit,System.currentTimeMillis());close(false);listener.failed(message);}
         else if(player!=null)player.pause();
     }
-    void pip(boolean active) { if(toolbar!=null)toolbar.setVisibility(active?View.GONE:View.VISIBLE);if(playerView!=null)playerView.setUseController(!active&&waitingLimit==null); }
+    void pip(boolean active) { if(fullscreen!=null)fullscreen.pip(active);if(playerView!=null)playerView.setUseController(!active&&waitingLimit==null); }
     boolean isWaiting(){return waitingLimit!=null;}
     boolean isOpen() { return player!=null; }
     long positionMs() { return player==null?0:player.getCurrentPosition(); }

@@ -2,7 +2,7 @@
 import {useEffect,useState} from 'react';
 import Link from 'next/link';
 import Icon from './Icons';
-import {EMPTY_LIBRARY,readLibrary,toggleFavorite,removeHistory,timeLabel} from '../lib/watch-library';
+import {EMPTY_LIBRARY,readLibrary,toggleFavorite,removeHistory,remainingLabel} from '../lib/watch-library';
 import type {WatchEntry} from '../lib/watch-library';
 import {imageUrl,titleHref,titleKey} from '../lib/catalog';
 import type {Title} from '../lib/catalog';
@@ -20,5 +20,5 @@ export function PosterCard({title,index}:{title:Title;index?:number}) {
 }
 export function ContinueCard({entry}:{entry:WatchEntry}) {
   const {title,position,duration,season,episode}=entry;
-  return <article className="continue-card"><Link href={titleHref(title)+'?play=1'} aria-label={`Continuar ${title.title}`}><div className="continue-art">{(title.backdrop_path||title.poster_path)&&<img src={imageUrl(title.backdrop_path||title.poster_path,'w500')} alt="" loading="lazy"/>}<span className="round-play"><Icon name="play" size={20}/></span>{duration>0&&<div className="watch-progress" role="progressbar" aria-label="Progresso assistido" aria-valuenow={Math.round(position/duration*100)} aria-valuemin={0} aria-valuemax={100}><span style={{width:`${Math.min(100,position/duration*100)}%`}}/></div>}</div><div className="continue-copy"><h3>{title.title}</h3><p>{title.media_type==='tv'?`T${season} · E${episode}`:'Filme'}<span>{duration>0?`${timeLabel(Math.max(0,duration-position))} restantes`:'Retomar título'}</span></p></div></Link><button className="icon-button remove-history" aria-label={`Remover ${title.title} de continuar assistindo`} onClick={()=>removeHistory(titleKey(title))}><Icon name="close" size={16}/></button></article>;
+  return <article className="continue-card"><Link href={titleHref(title)+'?play=1'} aria-label={`Continuar ${title.title}`}><div className="continue-art">{(title.backdrop_path||title.poster_path)&&<img src={imageUrl(title.backdrop_path||title.poster_path,'w500')} alt="" loading="lazy"/>}<span className="round-play"><Icon name="play" size={20}/></span>{duration>0&&<div className="watch-progress" role="progressbar" aria-label="Progresso assistido" aria-valuenow={Math.min(100,Math.max(0,Math.round(position/duration*100)))} aria-valuemin={0} aria-valuemax={100}><span style={{width:`${Math.min(100,position/duration*100)}%`}}/></div>}</div><div className="continue-copy"><h3>{title.title}</h3><p>{title.media_type==='tv'?`T${season} · E${episode}`:'Filme'}<span>{duration>0?remainingLabel(position,duration):entry.queued?'Próximo episódio':'Retomar título'}</span></p></div></Link><button type="button" className="icon-button remove-history" title="Remover de continuar assistindo" aria-label={`Remover ${title.title} de continuar assistindo`} onClick={()=>removeHistory(titleKey(title))}><Icon name="close" size={16}/></button></article>;
 }

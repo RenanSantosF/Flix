@@ -81,6 +81,48 @@ public class PopupBlockingTest {
         assertTrue("Expected block counter >= " + minimum, count(scenario, popup) >= minimum);
     }
 
+    @Test public void fullscreenRotatesEvenWhenPortraitIsRequestedAndRestoresOnBack() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            scenario.onActivity(a->a.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT));
+            load(scenario,"<!doctype html><title>Popup test</title><meta name='viewport' content='width=device-width,initial-scale=1'><body style='margin:0'><button style='height:64px;width:100%' onclick=\"var v=document.querySelector('video');v.play();v.requestFullscreen();\">Tela cheia</button><video muted loop playsinline src='data:video/mp4;base64,"+clip()+"'></video>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,100,30);
+            long until=SystemClock.uptimeMillis()+10000;java.util.concurrent.atomic.AtomicBoolean ready=new java.util.concurrent.atomic.AtomicBoolean();
+            while(SystemClock.uptimeMillis()<until){scenario.onActivity(a->ready.set(a.fullscreenControls()!=null&&a.getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE));if(ready.get())break;SystemClock.sleep(100);}
+            assertTrue("Fullscreen should actually rotate to landscape",ready.get());
+            waitForJs(scenario,"document.querySelector('video').currentTime>0.2");
+            scenario.onActivity(a->{java.util.ArrayList<android.view.View> buttons=new java.util.ArrayList<>();a.fullscreenControls().findViewsWithText(buttons,"Pausar",android.view.View.FIND_VIEWS_WITH_TEXT);assertFalse(buttons.isEmpty());buttons.get(0).performClick();});
+            waitForJs(scenario,"document.querySelector('video').paused");
+            scenario.onActivity(a->{java.util.ArrayList<android.view.View> buttons=new java.util.ArrayList<>();a.fullscreenControls().findViewsWithText(buttons,"Reproduzir",android.view.View.FIND_VIEWS_WITH_TEXT);assertFalse(buttons.isEmpty());buttons.get(0).performClick();});
+            waitForJs(scenario,"!document.querySelector('video').paused");saveScreenshot("Flix-tela-cheia.png");
+            scenario.onActivity(a->{assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,a.getRequestedOrientation());a.onBackPressed();assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,a.getRequestedOrientation());assertNull(a.fullscreenControls());});
+            waitForJs(scenario,"document.querySelector('video').currentTime>0 && !document.querySelector('video').paused");
+        }
+    }
+
+    @Test public void fullscreenLockConsumesVideoTouchesAndBrightnessIsRestored() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            scenario.onActivity(a->{
+                int original=a.getRequestedOrientation();float brightness=a.getWindow().getAttributes().screenBrightness;
+                java.util.concurrent.atomic.AtomicInteger clicks=new java.util.concurrent.atomic.AtomicInteger();
+                android.widget.Button surface=new android.widget.Button(a);surface.setText("Video surface");surface.setOnClickListener(v->clicks.incrementAndGet());
+                FullscreenPlayerLayout controls=new FullscreenPlayerLayout(a,surface,new FullscreenPlayerLayout.Actions(){public void exit(){}public void toggle(){}public void seek(int seconds){}});
+                a.addContentView(controls,new android.widget.FrameLayout.LayoutParams(-1,-1));float density=a.getResources().getDisplayMetrics().density;int width=Math.round(900*density),height=Math.round(500*density);controls.measure(ViewSpec(width),ViewSpec(height));controls.layout(0,0,width,height);
+                controls.setLocked(true);touchControls(controls,450*density,250*density,450*density,250*density);assertEquals(0,clicks.get());
+                controls.setLocked(false);touchControls(controls,450*density,250*density,450*density,250*density);assertEquals(1,clicks.get());
+                touchControls(controls,50*density,300*density,50*density,150*density);assertTrue(a.getWindow().getAttributes().screenBrightness>=.05f);
+                controls.pip(true);assertEquals(original,a.getRequestedOrientation());assertEquals(brightness,a.getWindow().getAttributes().screenBrightness,0f);
+                controls.pip(false);assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,a.getRequestedOrientation());
+                controls.release();((android.view.ViewGroup)controls.getParent()).removeView(controls);assertEquals(original,a.getRequestedOrientation());assertEquals(brightness,a.getWindow().getAttributes().screenBrightness,0f);
+            });
+        }
+    }
+    private static int ViewSpec(int size){return android.view.View.MeasureSpec.makeMeasureSpec(size,android.view.View.MeasureSpec.EXACTLY);}
+    private static void touchControls(FullscreenPlayerLayout controls,float x,float y,float toX,float toY){
+        long now=SystemClock.uptimeMillis();
+        for(int action:new int[]{MotionEvent.ACTION_DOWN,MotionEvent.ACTION_MOVE,MotionEvent.ACTION_UP}){MotionEvent e=MotionEvent.obtain(now,now+10*action,action,action==MotionEvent.ACTION_DOWN?x:toX,action==MotionEvent.ACTION_DOWN?y:toY,0);controls.dispatchTouchEvent(e);e.recycle();}
+    }
+
     @Test public void browserCompatibleModePlaysPassiveVideoButStillBlocksActiveHttpScripts() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()){
             byte[] clip=recoveryClip();

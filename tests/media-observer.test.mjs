@@ -156,3 +156,12 @@ test('a video that has already played cannot be reset by a delayed browser retry
  f.video.readyState=0;f.command({type:'retry-source',videoId:state.videoId,source:state.source});
  assert.equal(f.video.loads,0);assert.equal(f.video.plays,0);
 });
+
+test('fullscreen controls seek only the addressed finite video and toggle its playback',()=>{
+ const f=fixture();f.video.duration=60;f.video.currentTime=30;f.video.readyState=4;f.video.paused=false;f.emit('playing');const videoId=f.messages.at(-1).videoId;
+ f.command({type:'seek',videoId,seconds:-10});assert.equal(f.video.currentTime,20);
+ f.command({type:'seek',videoId:'other',seconds:10});assert.equal(f.video.currentTime,20);
+ f.command({type:'seek',videoId,seconds:1000});assert.equal(f.video.currentTime,20);
+ f.command({type:'toggle',videoId});assert.equal(f.video.paused,true);f.command({type:'toggle',videoId});assert.equal(f.video.paused,false);
+ f.video.duration=Infinity;f.command({type:'seek',videoId,seconds:10});assert.equal(f.video.currentTime,20);
+});

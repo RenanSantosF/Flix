@@ -4,7 +4,7 @@ import Icon from './Icons';
 import PlayerDiagnostic from './PlayerDiagnostic';
 import ProviderFrame from './ProviderFrame';
 import {useLibrary} from './Library';
-import {startWatching,recordProgress,readLibrary} from '../lib/watch-library';
+import {resumePosition,recordPlayback,queueEpisode,readLibrary} from '../lib/watch-library';
 import {imageUrl,titleKey} from '../lib/catalog';
 import type {Title} from '../lib/catalog';
 declare global {interface Window {FlixControl?:{postMessage:(message:string)=>void}}}
@@ -30,8 +30,8 @@ if(autoPlay){setStarted(true);setTimeout(()=>document.getElementById('assistir')
 useEffect(()=>{if(playRequest>0){setStarted(true);setEnded(false)}},[playRequest]);
 useEffect(()=>{
 if(!started||!initialized.current)return;
-const entry=startWatching(title,season,episode);setEnded(false);setNotice('');setMediaReady(false);endHandled.current=false;
-window.FlixControl?.postMessage(JSON.stringify({type:'context',key:titleKey(title),season,episode,resume:entry.position}));
+const resume=resumePosition(title,season,episode);lastSave.current=0;setEnded(false);setNotice('');setMediaReady(false);endHandled.current=false;
+window.FlixControl?.postMessage(JSON.stringify({type:'context',key:titleKey(title),season,episode,resume}));
 return()=>{window.FlixControl?.postMessage(JSON.stringify({type:'clear'}));};
 },[started,title,season,episode,reload]);
 useEffect(()=>{
@@ -41,12 +41,12 @@ if(!started||data?.key!==titleKey(title)||data.season!==season||data.episode!==e
 if(data.error){setNotice('Este servidor não conseguiu reproduzir o vídeo (erro '+data.error+'). Selecione outro servidor no player ou recarregue.');return;}
 if(data.playing){setMediaReady(true);setNotice(old=>old.startsWith('Este servidor não conseguiu')?'':old);}
 if(data.ended)setEnded(true);
-if(!data.playing||data.ended||Date.now()-lastSave.current>5000){recordProgress(data.key,season,episode,data.position,data.duration);lastSave.current=Date.now();}
+if(!data.playing||data.ended||Date.now()-lastSave.current>5000){if(recordPlayback(title,season,episode,data.position,data.duration,!!data.playing))lastSave.current=Date.now();}
 if(data.ended&&!endHandled.current&&type==='tv'){
  endHandled.current=true;
  const current=available.find(s=>s.season_number===season),following=available.find(s=>s.season_number>season);
- if(episode<(current?.episode_count||1))startWatching(title,season,episode+1);
- else if(following)startWatching(title,following.season_number,1);
+ if(episode<(current?.episode_count||1))queueEpisode(title,season,episode+1);
+ else if(following)queueEpisode(title,following.season_number,1);
 }
 };
 const message=(event:Event)=>{setNotice(String((event as CustomEvent).detail||'').slice(0,200));};

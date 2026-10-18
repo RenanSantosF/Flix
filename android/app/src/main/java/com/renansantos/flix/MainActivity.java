@@ -55,6 +55,7 @@ public final class MainActivity extends Activity {
     private LinearLayout errorPanel;
     private ProgressBar progress;
     private View customView;
+    private FullscreenPlayerLayout fullscreenPlayer;
     private WebChromeClient.CustomViewCallback customViewCallback;
     private String lastAppUrl = NavigationPolicy.HOME, contextKey = "", activeVideo = "";
     private int contextSeason = 1, contextEpisode = 1;
@@ -99,7 +100,7 @@ public final class MainActivity extends Activity {
         root.addView(normal, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
-            if (customView == null && !isInPictureInPictureMode()) view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+            if (customView == null && (nativePlayback==null||!nativePlayback.isOpen()) && !isInPictureInPictureMode()) view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             else view.setPadding(0, 0, 0, 0);
             return insets.consumeSystemWindowInsets();
         });
@@ -116,7 +117,7 @@ public final class MainActivity extends Activity {
         nativePlayback = new NativePlayback(this, root, this::enterPlayerPip, new NativePlayback.Listener() {
             @Override public void progress(double position,double duration,boolean playing,boolean ended) {
                 if(contextKey.isEmpty()||destroyed)return;
-                playbackActive=playing;if(playing){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}}root.setKeepScreenOn(playing);updatePipParams();
+                playbackActive=playing;if(fullscreenPlayer!=null)fullscreenPlayer.playing(playing);if(playing){sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}}root.setKeepScreenOn(playing);updatePipParams();
                 if(playing&&nativeWaitingNotice&&nativePlayback!=null&&!nativePlayback.isWaiting()){nativeWaitingNotice=false;notice("");diagnostic("");}
                 try {
                     JSONObject event=new JSONObject().put("key",contextKey).put("season",contextSeason).put("episode",contextEpisode)
@@ -163,7 +164,13 @@ public final class MainActivity extends Activity {
                 if (customView != null) { callback.onCustomViewHidden(); return; }
                 customView = view; customViewCallback = callback;
                 normal.setVisibility(View.GONE); root.setPadding(0, 0, 0, 0);
-                root.addView(view, new FrameLayout.LayoutParams(-1, -1));
+                fullscreenPlayer=new FullscreenPlayerLayout(MainActivity.this,view,new FullscreenPlayerLayout.Actions(){
+                    public void exit(){exitFullscreen();}
+                    public void toggle(){videoCommand("toggle",0);}
+                    public void seek(int seconds){videoCommand("seek",seconds);}
+                    public void pip(){enterPlayerPip();}
+                });
+                root.addView(fullscreenPlayer, new FrameLayout.LayoutParams(-1, -1));
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
                 updatePipParams();
             }
@@ -372,7 +379,7 @@ public final class MainActivity extends Activity {
                     reply.postMessage(restore.toString());
                     return;
                 }
-                playbackActive = playing;if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
+                playbackActive = playing;if(fullscreenPlayer!=null)fullscreenPlayer.playing(playing);if(playing&&(position>0.1||"playing".equals(data.optString("event")))){browserRetry.succeeded();if(!sessionStarted||!webRetrySource.isEmpty())notice("");cancelWebRetry();sessionStarted=true;stallArmed=false;stallGeneration++;terminalBrowserError=false;if(stallNotice){stallNotice=false;notice("");diagnostic("");}} root.setKeepScreenOn(playing); updatePipParams();
                 JSONObject event = new JSONObject().put("key", contextKey).put("season", contextSeason).put("episode", contextEpisode)
                     .put("position", live ? Math.min(position, 604800) : Math.min(position, duration)).put("duration", duration).put("live", live).put("playing", playing).put("ended", data.optBoolean("ended", false));
                 browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:progress',{detail:" + event + "}))", null);
@@ -530,7 +537,7 @@ public final class MainActivity extends Activity {
         try { if (!enterPictureInPictureMode(pipParams())) { enteringPip = false; restoreInlineLayout(); notice("Permita a janela flutuante nas configurações do Android para continuar."); } }
         catch (IllegalStateException | IllegalArgumentException e) { enteringPip = false; restoreInlineLayout(); notice("Permita a janela flutuante nas configurações do Android para continuar."); }
     }
-    private void restoreInlineLayout() { if(nativePlayback!=null)nativePlayback.pip(false); if (!destroyed) browser.evaluateJavascript("document.body.classList.remove('flix-pip')", null); }
+    private void restoreInlineLayout() { if(fullscreenPlayer!=null)fullscreenPlayer.pip(false);if(nativePlayback!=null)nativePlayback.pip(false); if (!destroyed) browser.evaluateJavascript("document.body.classList.remove('flix-pip')", null); }
     @Override protected void onUserLeaveHint() {
         super.onUserLeaveHint();
         if (playbackActive && !(Build.VERSION.SDK_INT >= 31 && (customView != null || (nativePlayback!=null&&nativePlayback.isOpen())))) enterPlayerPip();
@@ -539,7 +546,7 @@ public final class MainActivity extends Activity {
         super.onPictureInPictureModeChanged(inPip, config);
         enteringPip = false;
         progress.setVisibility(View.GONE);
-        if (inPip) { root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
+        if (inPip) { if(fullscreenPlayer!=null)fullscreenPlayer.pip(true);root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
         else { restoreInlineLayout(); root.requestApplyInsets(); }
     }
     @Override protected void onStart() {super.onStart();foreground=true;requestGate.visible(true);if(nativePlayback!=null)nativePlayback.visible();}
@@ -555,9 +562,12 @@ public final class MainActivity extends Activity {
     private static WebResourceResponse emptyResponse() { return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream("".getBytes(StandardCharsets.UTF_8))); }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void noteBlockedNavigation() { blockedNavigations.incrementAndGet(); }
+    private void videoCommand(String type,int seconds){
+        if(activeReply!=null&&!activeVideo.isEmpty())try{activeReply.postMessage(new JSONObject().put("type",type).put("videoId",activeVideo).put("seconds",seconds).toString());}catch(Exception ignored){}
+    }
     private void exitFullscreen() {
         if (customView == null) return;
-        root.removeView(customView); customView = null; normal.setVisibility(View.VISIBLE);
+        if(fullscreenPlayer!=null){fullscreenPlayer.release();root.removeView(fullscreenPlayer);fullscreenPlayer=null;}customView = null; normal.setVisibility(View.VISIBLE);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE); root.requestApplyInsets(); updatePipParams();
         if (customViewCallback != null) { customViewCallback.onCustomViewHidden(); customViewCallback = null; }
     }
@@ -566,7 +576,7 @@ public final class MainActivity extends Activity {
     @Override protected void onDestroy() {
         destroyed = true;requestGate.clear();cancelWebRetry();pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);
         for (WebView sink : popupSinks) sink.destroy(); popupSinks.clear();
-        if(nativePlayback!=null)nativePlayback.close(false);
+        exitFullscreen();if(nativePlayback!=null)nativePlayback.close(false);
         browser.stopLoading(); browser.destroy(); super.onDestroy();
     }
     void playerTestBootstrap(String script) {if(!selfTest())throw new IllegalStateException("Debug fixture only");testBootstrap=script;}
@@ -627,6 +637,7 @@ public final class MainActivity extends Activity {
     int nativeOpenCount(){return testNativeOpens;}
     boolean isNativePlaybackOpen() {return nativePlayback!=null&&nativePlayback.isOpen();}
     long nativePositionMs() {return nativePlayback==null?0:nativePlayback.positionMs();}
+    FullscreenPlayerLayout fullscreenControls(){return fullscreenPlayer;}
     WebView testBrowser() { return browser; }
     void loadTestHtml(String html) { if (!selfTest()) throw new IllegalStateException("Test fixture is debug-only"); testHtml = html; browser.loadUrl(NavigationPolicy.HOME + "android-test"); }
     int popupCount() { return blockedPopups.get(); }
