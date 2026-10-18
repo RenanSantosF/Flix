@@ -56,6 +56,7 @@ final class NativePlayback {
     private final Listener listener;
     private final Runnable pip;
     private ExoPlayer player;
+    private String currentMediaType="";
     private LinearLayout panel;
     private PlayerView playerView;
     private FullscreenPlayerLayout fullscreen;
@@ -124,7 +125,7 @@ final class NativePlayback {
         }).build();return new OkHttpDataSource.Factory(client);
     }
     void open(String source, String sourceType, MediaRequestContext context, String userAgent, double resume, DataSource.Factory testSource) {
-        close(false);
+        close(false);currentMediaType=sourceType;
         final int generation=session;
         // Media URLs can contain ephemeral signatures. Do not let engine errors log them.
         androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF);
@@ -184,7 +185,7 @@ final class NativePlayback {
                 // Retry a parsing failure once only when actual bytes identify that
                 // manifest. HTTP/authorization/decoder errors are never retried here.
                 if(!formatRecovered&&parsing&&!detected.isEmpty()&&!detected.equals(mime)) {
-                    formatRecovered=true;positioned=false;
+                    formatRecovered=true;positioned=false;currentMediaType=detected;
                     player.setMediaItem(new MediaItem.Builder().setUri(source).setMimeType(detected).build());
                     player.prepare();player.play();return;
                 }
@@ -243,7 +244,7 @@ final class NativePlayback {
             return "O servidor devolveu uma fonte que não pôde ser lida como vídeo. Tente o principal ou o legendado.";
         return "Não foi possível recuperar este vídeo (código "+error.errorCode+"). Tente o principal ou o legendado.";
     }
-    void report(boolean ended) { if(player!=null){if(fullscreen!=null)fullscreen.playing(player.isPlaying());long duration=player.getDuration();listener.progress(Math.max(0,player.getCurrentPosition()/1000d),duration>0?duration/1000d:0,player.isPlaying(),ended);} }
+    void report(boolean ended) { if(player!=null){if(fullscreen!=null&&!(activity instanceof MainActivity&&((MainActivity)activity).isCasting()))fullscreen.playing(player.isPlaying());long duration=player.getDuration();listener.progress(Math.max(0,player.getCurrentPosition()/1000d),duration>0?duration/1000d:0,player.isPlaying(),ended);} }
     void close(boolean reportPosition) {
         session++;
         if(player==null&&panel==null)return;
@@ -262,6 +263,7 @@ final class NativePlayback {
     boolean isOpen() { return player!=null; }
     void castPlaying(boolean playing){if(fullscreen!=null)fullscreen.playing(playing);}
     void pauseForCast(){if(player!=null)player.pause();}
+    String mediaType(){return currentMediaType;}
     long durationMs(){return player==null?0:Math.max(0,player.getDuration());}
     long positionMs() { return player==null?0:player.getCurrentPosition(); }
     private int dp(int size) { return Math.round(size*activity.getResources().getDisplayMetrics().density); }

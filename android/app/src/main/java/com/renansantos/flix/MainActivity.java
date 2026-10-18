@@ -588,13 +588,14 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     void openCast(){
         if(destroyed||!foreground||contextKey.isEmpty())return;
         if(nativePlayback!=null&&nativePlayback.isOpen()){
-            try{cast.offer(contextKey,new CastMedia(recoverySource,"",contextTitle,nativePlayback.positionMs()/1000d,nativePlayback.durationMs()/1000d,contextKey.startsWith("live:")));}catch(IllegalArgumentException invalid){castMessage("Esta fonte não está disponível para transmitir à TV.");}return;
+            try{cast.offer(contextKey,new CastMedia(recoverySource,nativePlayback.mediaType(),contextTitle,nativePlayback.positionMs()/1000d,nativePlayback.durationMs()/1000d,contextKey.startsWith("live:")));}catch(IllegalArgumentException invalid){castMessage("Esta fonte não está disponível para transmitir à TV.");}return;
         }
         if(activeReply==null||activeVideo.isEmpty()){castMessage("Inicie o vídeo e depois toque em Transmitir para TV.");return;}
         castToken=java.util.UUID.randomUUID().toString();String token=castToken;
         try{activeReply.postMessage(new JSONObject().put("type","cast-source").put("videoId",activeVideo).put("token",token).toString());}catch(Exception failed){castToken="";castMessage("Não foi possível preparar a transmissão. Tente novamente.");return;}
         handler.postDelayed(()->{if(token.equals(castToken)){castToken="";castMessage("O player não respondeu. Retome o vídeo e tente transmitir novamente.");}},5000);
     }
+    boolean isCasting(){return cast!=null&&cast.owns();}
     boolean castControl(String type,int seconds){return cast!=null&&cast.control(type,seconds);}
     private void videoCommand(String type,int seconds){
         if(cast!=null&&cast.control(type,seconds))return;localVideoCommand(type,seconds);
