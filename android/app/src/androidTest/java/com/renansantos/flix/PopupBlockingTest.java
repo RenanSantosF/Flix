@@ -100,6 +100,19 @@ public class PopupBlockingTest {
         }
     }
 
+    @Test public void customProviderControlsStayHiddenAndPausedFullscreenHasWorkingTimeline() throws Exception {
+        try(ActivityScenario<MainActivity> scenario=launch()){
+            load(scenario,"<!doctype html><title>Popup test</title><meta name='viewport' content='width=device-width,initial-scale=1'><style>body{margin:0}.fluid_video_wrapper{position:relative;width:100%;height:300px;background:black}.fluid_controls_container{position:absolute;bottom:0;background:red;color:white;width:100%;height:60px}.fluid_initial_play{position:absolute;top:40%;background:red;color:white}</style><button style='width:50%;height:64px' onclick=\"document.querySelector('video').play()\">Assistir</button><button style='width:50%;height:64px' onclick=\"document.querySelector('video').pause();document.querySelector('.fluid_video_wrapper').requestFullscreen()\">Tela cheia pausada</button><div class='fluid_video_wrapper'><video controls muted loop playsinline style='width:100%;height:100%' src='data:video/mp4;base64,"+clip()+"'></video><div class='fluid_controls_container'>CONTROLES DO PROVEDOR</div><div class='fluid_initial_play'>PLAY DO PROVEDOR</div></div><div id='other-player'><div class='fluid_controls_container'>OUTRO PLAYER</div></div><script>setInterval(function(){var bar=document.querySelector('.fluid_video_wrapper .fluid_controls_container');bar.style.display='block';bar.style.opacity='1';},200);</script>");
+            waitForJs(scenario,"!!window.FlixControl && !!window.__flixMediaObserver");js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,60,30);waitForJs(scenario,"document.querySelector('video').currentTime>.3");tap(scenario,250,30);
+            waitForJs(scenario,"!!document.fullscreenElement && document.querySelector('video').paused && getComputedStyle(document.querySelector('.fluid_video_wrapper .fluid_controls_container')).display==='none' && getComputedStyle(document.querySelector('.fluid_initial_play')).display==='none'");
+            SystemClock.sleep(1200);
+            assertEquals("true",js(scenario,"getComputedStyle(document.querySelector('.fluid_video_wrapper .fluid_controls_container')).display==='none' && getComputedStyle(document.querySelector('#other-player .fluid_controls_container')).display!=='none'"));
+            scenario.onActivity(a->{assertNotNull(a.fullscreenControls());java.util.ArrayList<android.view.View> found=new java.util.ArrayList<>();a.fullscreenControls().findViewsWithText(found,"Posição do vídeo",android.view.View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION);assertFalse(found.isEmpty());assertTrue("Paused fullscreen timeline must already know duration",found.get(0).isEnabled());a.fullscreenControls().showControls();});
+            saveScreenshot("Flix-player-unico.png");clickFullscreenControl(scenario,"Reproduzir");waitForJs(scenario,"!document.querySelector('video').paused");
+            scenario.onActivity(a->a.onBackPressed());waitForJs(scenario,"!document.fullscreenElement && getComputedStyle(document.querySelector('.fluid_video_wrapper .fluid_controls_container')).display!=='none' && document.querySelector('video').controls");
+        }
+    }
+
     @Test public void fullscreenLockConsumesVideoTouchesAndBrightnessIsRestored() throws Exception {
         try(ActivityScenario<MainActivity> scenario=launch()){
             scenario.onActivity(a->{

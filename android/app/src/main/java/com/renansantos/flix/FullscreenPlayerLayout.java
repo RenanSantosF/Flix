@@ -72,7 +72,7 @@ final class FullscreenPlayerLayout extends FrameLayout {
         feedback=new TextView(activity);feedback.setTextSize(18);feedback.setTextColor(Color.WHITE);feedback.setGravity(Gravity.CENTER);feedback.setBackground(pill(0xdd18181e));feedback.setPadding(dp(24),dp(14),dp(24),dp(14));feedback.setVisibility(GONE);addView(feedback,new LayoutParams(-2,-2,Gravity.CENTER));
         activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);immersive();showControls();
     }
-    private TextView timeView(){TextView label=new TextView(activity);label.setText("0:00");label.setTextColor(Color.WHITE);label.setTextSize(11);label.setGravity(Gravity.CENTER);return label;}
+    private TextView timeView(){TextView label=new TextView(activity);label.setText("—:—");label.setTextColor(Color.WHITE);label.setTextSize(11);label.setGravity(Gravity.CENTER);return label;}
     private String time(double seconds){long value=(long)Math.max(0,seconds);return value>=3600?String.format(java.util.Locale.ROOT,"%d:%02d:%02d",value/3600,value/60%60,value%60):String.format(java.util.Locale.ROOT,"%d:%02d",value/60,value%60);}
     void progress(double position,double duration){mediaDuration=Double.isFinite(duration)&&duration>0?duration:0;scrubber.setEnabled(mediaDuration>0);if(!scrubbing){elapsed.setText(time(position));total.setText(mediaDuration>0?time(duration):"AO VIVO");scrubber.setProgress(mediaDuration>0?(int)Math.min(1000,Math.max(0,position/duration*1000)):0);}}
     private android.graphics.drawable.Drawable pill(int color){GradientDrawable shape=new GradientDrawable();shape.setColor(color);shape.setCornerRadius(dp(40));shape.setStroke(dp(1),0x28ffffff);return new RippleDrawable(ColorStateList.valueOf(0x44ffffff),shape,null);}
