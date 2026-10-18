@@ -7,8 +7,8 @@
       var doc=win.document, players=new Map(), fullscreen=new WeakSet(), style;
       var providerControls=['.fluid_controls_container','.fluid_controls_progress_container','.fluid_initial_play','.fluid_initial_play_button','.fluid_video_play_pause','.jw-controlbar','.jw-display','.jw-settings-menu','.jw-rightclick','.plyr__controls','.plyr__control--overlaid','.vjs-control-bar','.vjs-big-play-button'];
       function enabled(){return win.location.hostname==='superflixapi.fun'||win.top!==win||!!doc.querySelector('[data-flix-identity-preview]');}
+      function visible(node){if(!node||!node.getClientRects().length)return false;for(var depth=0;node&&depth<10;node=node.parentElement,depth++){var s=win.getComputedStyle(node);if(s.display==='none'||s.visibility==='hidden'||s.opacity==='0')return false;}return true;}
       function adVisible(scope){
-        function visible(node){if(!node.getClientRects().length)return false;for(var depth=0;node&&depth<10;node=node.parentElement,depth++){var s=win.getComputedStyle(node);if(s.display==='none'||s.visibility==='hidden'||s.opacity==='0')return false;}return true;}
         if(scope.matches('.jw-flag-ads,.vjs-ad-playing,.vjs-ad-loading,.plyr--ads')||Array.from(scope.querySelectorAll('.fluid_ad_skip,.fluid_ad_countdown,.jw-ad-skip')).some(visible))return true;
         return Array.from(doc.querySelectorAll('.jw-text-alt,.jw-text,[role="status"],[aria-live]')).slice(0,24).some(function(label){
           if(!/^loading\s+ad(?:vertisement)?[.\s…]*$/i.test(String(label.textContent||'').trim())||!label.getClientRects().length)return false;
@@ -20,14 +20,23 @@
         style=doc.createElement('style');
         style.textContent=providerControls.map(function(s){return '[data-flix-inline-owned] '+s;}).join(',')+'{display:none!important;visibility:hidden!important;pointer-events:none!important}'
           +'video[data-flix-inline-video]::-webkit-media-controls,video[data-flix-inline-video]::-webkit-media-controls-enclosure{display:none!important}'
-          +'[data-flix-server]{box-sizing:border-box!important;position:relative!important;display:flex!important;align-items:center!important;gap:0!important;min-height:94px!important;padding:22px 24px!important;border:1px solid #f43f6238!important;border-radius:20px!important;background:radial-gradient(ellipse at 0 0,#f43f6224,transparent 75%),#17131c!important;color:#fff!important;font-family:system-ui,sans-serif!important;font-size:17px!important;font-weight:750!important;letter-spacing:-.3px!important;text-align:left!important;box-shadow:0 8px 28px #0003!important;transition:transform .18s,background .18s!important;cursor:pointer!important}'
-          +'[data-flix-server]:active{transform:scale(.98)!important}[data-flix-server]:before{content:"▶";display:grid;place-items:center;flex:0 0 42px;margin-right:16px;height:42px;border-radius:14px;background:#f43f62;color:white;font-size:14px}'
-          +'[data-flix-server="alternate"]:before{content:"⇄";background:#ffffff12;color:#f8a1b7;font-size:23px}'
-          +'[data-flix-server]:after{content:"FLIX · 01";margin-left:auto;color:#d28a9e;font-size:9px;letter-spacing:1.4px;white-space:nowrap}'
-          +'[data-flix-server="alternate"]:after{content:"FLIX · 02"}[data-flix-server]>svg,[data-flix-server]>i,[data-flix-server]>[class*="icon"]{display:none!important}'
+          +'[data-flix-server]{box-sizing:border-box!important;position:relative!important;display:flex!important;align-items:center!important;gap:0!important;width:100%!important;min-width:0!important;min-height:88px!important;padding:18px!important;border:1px solid #f43f6255!important;border-radius:18px!important;background:linear-gradient(115deg,#2c1927,#17131c)!important;color:#fff!important;font-family:system-ui,sans-serif!important;font-size:17px!important;font-weight:700!important;letter-spacing:0!important;line-height:1.4!important;white-space:normal!important;text-align:left!important;box-shadow:0 8px 28px #0003!important;transition:transform .18s,background .18s!important;cursor:pointer!important}'
+          +'[data-flix-server] *{color:#fff!important;font:inherit!important;letter-spacing:inherit!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important;min-width:0!important;max-width:100%!important}'
+          +'[data-flix-server-label]{display:block!important;flex:1 1 auto!important;overflow-wrap:normal!important;word-break:normal!important}'
+          +'[data-flix-server-path]{display:contents!important}[data-flix-server-decoration]{display:none!important}'
+          +'[data-flix-server]:active{transform:scale(.98)!important}[data-flix-server]:before{content:"▶"!important;display:grid!important;place-items:center;flex:0 0 42px;margin-right:14px;height:42px;border-radius:14px;background:#f43f62;color:white;font-size:14px}'
+          +'[data-flix-server="alternate"]:before{content:"⇄"!important;background:#ffffff12;color:#f8a1b7;font-size:23px}[data-flix-server]:after{content:none!important}'
           +'[data-flix-audio]{border-radius:12px!important;font-family:system-ui,sans-serif!important;border-color:#ffffff15!important;box-shadow:none!important}'
           +'[data-flix-audio][aria-selected="true"],[data-flix-audio].active{background:#f43f62!important}'
-          +'.fluid_initial_play_button{border-color:#f43f62!important}.fluid_initial_play{border-radius:24px!important}';
+          // Style the original first-play hit target. Its provider listener still starts setup/ads.
+          +'[data-flix-preplay] .fluid_controls_container,[data-flix-preplay] .fluid_controls_progress_container{visibility:hidden!important;pointer-events:none!important}'
+          +'[data-flix-preplay] video::-webkit-media-controls,[data-flix-preplay] video::-webkit-media-controls-enclosure{display:none!important}'
+          +'[data-flix-preplay] .fluid_initial_play{box-sizing:border-box!important;position:absolute!important;top:50%!important;left:50%!important;transform:translate(-50%,-50%)!important;width:76px!important;height:76px!important;margin:0!important;padding:0!important;border:1px solid #ffffff55!important;border-radius:50%!important;background:#fff!important;background-image:none!important;box-shadow:0 8px 40px #0006!important;cursor:pointer!important}'
+          +'[data-flix-preplay] .fluid_initial_play_button{box-sizing:content-box!important;position:absolute!important;top:50%!important;left:50%!important;transform:translate(-35%,-50%)!important;width:0!important;height:0!important;margin:0!important;padding:0!important;border-top:12px solid transparent!important;border-bottom:12px solid transparent!important;border-left:19px solid #17131c!important;border-right:0!important;background:none!important}'
+          +'[data-flix-preplay] .fluid_initial_play_button:before,[data-flix-preplay] .fluid_initial_play_button:after{content:none!important}[data-flix-preplay] .fluid_initial_play_button>*{visibility:hidden!important}'
+          +'[data-flix-preplay]:before{content:"FLIX ·";position:absolute;top:18px;left:18px;z-index:10;color:#fff;font:900 19px system-ui,sans-serif;letter-spacing:-1px;pointer-events:none;text-shadow:0 2px 10px #000}'
+          +'[data-flix-preplay]:after{content:"Toque para assistir";position:absolute;bottom:24px;left:18px;right:18px;z-index:10;text-align:center;color:#fff;font:600 13px system-ui,sans-serif;pointer-events:none;text-shadow:0 2px 10px #000}'
+          +'[data-flix-preplay="loading"]:after{content:"Preparando sua sessão…"}';
         (doc.head||doc.documentElement).appendChild(style);
       }
       function themeServers(){
@@ -39,7 +48,18 @@
           if(Array.from(node.children).some(function(child){return String(child.textContent||'').trim().replace(/\s+/g,' ')===text;}))return;
           var target=node.closest('button,a,[role="button"],[onclick]')||node;
           if(target===node&&!node.matches('button,a,[role="button"],[onclick]'))for(var depth=0;depth<4&&target.parentElement&&target.parentElement!==doc.body&&String(target.parentElement.textContent||'').trim().replace(/\s+/g,' ')===text;depth++)target=target.parentElement;
-          if(/^Servidor /i.test(text))target.setAttribute('data-flix-server',/Alternativo/i.test(text)?'alternate':'primary');
+          if(/^Servidor /i.test(text)){
+            target.setAttribute('data-flix-server',/Alternativo/i.test(text)?'alternate':'primary');
+            // Keep the label and every original action, but remove nested decorative siblings
+            // from layout. Flatten label wrappers so provider flex/ellipsis rules cannot clip it.
+            if(target!==node){
+              node.setAttribute('data-flix-server-label','');
+              for(var branch=node;branch&&branch!==target;branch=branch.parentElement){
+                if(branch!==node)branch.setAttribute('data-flix-server-path','');
+                Array.from(branch.parentElement.children).forEach(function(sibling){if(sibling!==branch)sibling.setAttribute('data-flix-server-decoration','');});
+              }
+            }
+          }
           else target.setAttribute('data-flix-audio','');
         });
       }
@@ -96,11 +116,15 @@
         mountStyle();themeServers();
         players.forEach(function(player,video){if(!video.isConnected){player.remove();players.delete(video);}else player.refresh();});
         doc.querySelectorAll('video').forEach(function(video){
+          var scope=video.closest('.fluid_video_wrapper,.jwplayer,.plyr,.video-js');
+          var full=doc.fullscreenElement||doc.webkitFullscreenElement;
+          var initial=scope&&scope.querySelector('.fluid_initial_play');
+          var preplay=scope&&!players.has(video)&&!video.error&&!fullscreen.has(video)&&!(full&&full.contains(video))&&!adVisible(scope)&&scope.matches('.fluid_video_wrapper')&&initial;
+          if(scope){if(preplay)scope.setAttribute('data-flix-preplay',visible(initial)?'ready':'loading');else scope.removeAttribute('data-flix-preplay');}
           // Let the provider's original first-play/ad preparation run before taking control.
           if(players.has(video)||video.readyState<3||video.paused||video.currentTime<=.1||video.error)return;
-          var scope=video.closest('.fluid_video_wrapper,.jwplayer,.plyr,.video-js');
           if(!scope||scope.querySelectorAll('video').length!==1||adVisible(scope))return;
-          var player=create(video,scope);if(player){players.set(video,player);player.refresh();}
+          var player=create(video,scope);if(player){scope.removeAttribute('data-flix-preplay');players.set(video,player);player.refresh();}
         });
       }
       win.__flixPlayerIdentity={scan:scan,fullscreen:function(video,active){if(active)fullscreen.add(video);else fullscreen.delete(video);var player=players.get(video);if(player)player.refresh();}};
@@ -108,6 +132,12 @@
       doc.addEventListener('loadedmetadata',scan,true);doc.addEventListener('canplay',scan,true);
       doc.addEventListener('timeupdate',function(event){if(!players.has(event.target))scan();},true);
       ['loadstart','emptied'].forEach(function(name){doc.addEventListener(name,function(event){var player=players.get(event.target);if(player){player.remove();players.delete(event.target);}},true);});
+      // Mutation delivery happens before paint, unlike the former one-second-only poll.
+      // Ignore our shadow UI/style writes to avoid a self-triggered observer loop.
+      new win.MutationObserver(function(records){
+        if(records.some(function(record){var target=record.target;return target.nodeType!==1||(!target.closest('[data-flix-inline-ui]')&&target!==style);})){scan();}
+      }).observe(doc,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden','aria-hidden']});
+      doc.addEventListener('DOMContentLoaded',scan);
       win.setInterval(scan,1000);scan();
     }catch(_){}
   }
