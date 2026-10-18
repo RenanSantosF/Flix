@@ -105,7 +105,7 @@ public class PopupBlockingTest {
             scenario.onActivity(a->{
                 int original=a.getRequestedOrientation();float brightness=a.getWindow().getAttributes().screenBrightness;
                 java.util.concurrent.atomic.AtomicInteger clicks=new java.util.concurrent.atomic.AtomicInteger();
-                android.widget.Button surface=new android.widget.Button(a);surface.setText("Video surface");surface.setOnClickListener(v->clicks.incrementAndGet());
+                android.widget.Button surface=new android.widget.Button(a);surface.setText("Video surface");surface.setOnTouchListener((v,e)->{if(e.getActionMasked()==MotionEvent.ACTION_UP)clicks.incrementAndGet();return true;});
                 FullscreenPlayerLayout controls=new FullscreenPlayerLayout(a,surface,new FullscreenPlayerLayout.Actions(){public void exit(){}public void toggle(){}public void seek(int seconds){}});
                 a.addContentView(controls,new android.widget.FrameLayout.LayoutParams(-1,-1));float density=a.getResources().getDisplayMetrics().density;int width=Math.round(900*density),height=Math.round(500*density);controls.measure(ViewSpec(width),ViewSpec(height));controls.layout(0,0,width,height);
                 controls.setLocked(true);touchControls(controls,450*density,250*density,450*density,250*density);assertEquals(0,clicks.get());
