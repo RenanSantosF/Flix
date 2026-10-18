@@ -165,3 +165,11 @@ test('fullscreen controls seek only the addressed finite video and toggle its pl
  f.command({type:'toggle',videoId});assert.equal(f.video.paused,true);f.command({type:'toggle',videoId});assert.equal(f.video.paused,false);
  f.video.duration=Infinity;f.command({type:'seek',videoId,seconds:10});assert.equal(f.video.currentTime,20);
 });
+
+test('cast source is returned only on explicit request for the addressed playable video',()=>{
+ const f=fixture();f.video.src='https://cdn.example/movie.mp4?session=private';f.video.duration=7200;f.video.currentTime=123;f.video.readyState=4;f.video.paused=false;f.emit('playing');const videoId=f.messages.at(-1).videoId;
+ assert.equal(f.messages.filter(m=>m.event==='cast-source').length,0);
+ f.command({type:'cast-source',videoId:'other',token:'one'});assert.equal(f.messages.filter(m=>m.event==='cast-source').length,0);
+ f.command({type:'cast-source',videoId,token:'one'});const reply=f.messages.at(-1);assert.equal(reply.event,'cast-source');assert.equal(reply.source,f.video.src);assert.equal(reply.position,123);assert.equal(reply.token,'one');assert.equal(f.video.loads,0);assert.equal(f.video.plays,0);
+ f.label('Loading ad');f.command({type:'cast-source',videoId,token:'two'});assert.equal(f.messages.at(-1).source,'');
+});

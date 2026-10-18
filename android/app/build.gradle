@@ -6,8 +6,8 @@ android {
         applicationId 'com.renansantos.flix'
         minSdk 26
         targetSdk 35
-        versionCode 17
-        versionName '0.17-comfort'
+        versionCode 18
+        versionName '0.18-cast-design'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true }
@@ -16,6 +16,8 @@ android {
 }
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.gms:play-services-cast-framework:22.3.1'
     def media3 = '1.6.1' // Compatible with the existing compileSdk 35 / AGP toolchain.
     implementation "androidx.media3:media3-exoplayer:$media3"
     implementation "androidx.media3:media3-exoplayer-hls:$media3"

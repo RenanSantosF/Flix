@@ -136,7 +136,12 @@
         try {
           var data = JSON.parse(event.data), video = videos[data.videoId];
           if (!video) return;
-          if (data.type === 'retry-source') {
+          if (data.type === 'cast-source' && typeof data.token==='string' && data.token.length<=64) {
+            var selected=mediaSource(video),assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'';
+            if(/^http:\/\//i.test(assigned))selected={source:assigned,sourceType:(video.querySelector('source[src]')||{}).type||''};
+            if(loadingAdVisible()||video.readyState<2)selected={source:'',sourceType:''};
+            win.FlixMedia.postMessage(JSON.stringify({event:'cast-source',token:data.token,videoId:identity(video),source:selected.source,sourceType:selected.sourceType,position:video.currentTime||0,duration:isFinite(video.duration)?video.duration:0}));
+          } else if (data.type === 'retry-source') {
             // Retry the assigned URL in its original document/cookie context only.
             var assigned=video.currentSrc||video.src||(video.querySelector('source[src]')||{}).src||'';
             if(browserRetried.has(video)||video.isConnected===false||assigned!==data.source||!/^https:\/\//i.test(assigned)||video.readyState!==0||video.ended||loadingAdVisible()||!retryWanted(video))return;

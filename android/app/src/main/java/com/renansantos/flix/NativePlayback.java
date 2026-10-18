@@ -136,8 +136,9 @@ final class NativePlayback {
         panel.addView(playerView,new LinearLayout.LayoutParams(-1,0,1));fullscreen=new FullscreenPlayerLayout(activity,panel,new FullscreenPlayerLayout.Actions(){
             public void exit(){close(true);}
             public void pip(){pip.run();}
-            public void toggle(){if(player!=null){if(player.isPlaying())player.pause();else player.play();}}
-            public void seek(int seconds){if(player!=null&&!player.isCurrentMediaItemLive()&&player.getDuration()>0)player.seekTo(Math.max(0,Math.min(player.getDuration()-1,player.getCurrentPosition()+seconds*1000L)));}
+            public void cast(){if(activity instanceof MainActivity)((MainActivity)activity).openCast();}
+            public void toggle(){if(activity instanceof MainActivity&&((MainActivity)activity).castControl("toggle",0))return;if(player!=null){if(player.isPlaying())player.pause();else player.play();}}
+            public void seek(int seconds){if(activity instanceof MainActivity&&((MainActivity)activity).castControl("seek",seconds))return;if(player!=null&&!player.isCurrentMediaItemLive()&&player.getDuration()>0)player.seekTo(Math.max(0,Math.min(player.getDuration()-1,player.getCurrentPosition()+seconds*1000L)));}
         });root.addView(fullscreen,new FrameLayout.LayoutParams(-1,-1));
         final MediaFormatProbe format=new MediaFormatProbe();
         DataSource.Factory requests=testSource!=null?testSource:network(context,userAgent);
@@ -259,6 +260,9 @@ final class NativePlayback {
     void pip(boolean active) { if(fullscreen!=null)fullscreen.pip(active);if(playerView!=null)playerView.setUseController(!active&&waitingLimit==null); }
     boolean isWaiting(){return waitingLimit!=null;}
     boolean isOpen() { return player!=null; }
+    void castPlaying(boolean playing){if(fullscreen!=null)fullscreen.playing(playing);}
+    void pauseForCast(){if(player!=null)player.pause();}
+    long durationMs(){return player==null?0:Math.max(0,player.getDuration());}
     long positionMs() { return player==null?0:player.getCurrentPosition(); }
     private int dp(int size) { return Math.round(size*activity.getResources().getDisplayMetrics().density); }
 }
