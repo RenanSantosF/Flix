@@ -74,6 +74,13 @@ public class BrowserRequestGateTest {
             now.set(5000);gate.visible(true);assertTrue(result.get(1,TimeUnit.SECONDS));
         }finally{worker.shutdownNow();}
     }
+    @Test public void repeatedNonMediaResource429IsNotPermanentlyStoppedAsAVideo(){
+        AtomicLong now=new AtomicLong(1000);BrowserRequestGate gate=new BrowserRequestGate(now::get);
+        String resource="https://cdn.example/config.json";gate.source(MEDIA);
+        gate.limited(resource,new MediaRateLimit.Deadline(2000,true));gate.appRetry(resource);
+        assertFalse(gate.limited(resource,new MediaRateLimit.Deadline(4000,true)));assertFalse(gate.terminal());
+        now.set(4000);assertTrue(gate.await(resource,()->fail("Expired non-media cooldown")));
+    }
     @Test public void appInitiatedRetryAlsoCountsTowardSecondRefusal(){
         BrowserRequestGate gate=new BrowserRequestGate(()->1000);gate.source(MEDIA);gate.limited(MEDIA,new MediaRateLimit.Deadline(2000,true));
         gate.appRetry(MEDIA);assertTrue(gate.limited(MEDIA,new MediaRateLimit.Deadline(3000,true)));assertTrue(gate.terminal());

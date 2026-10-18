@@ -43,12 +43,13 @@ final class BrowserRequestGate {
     synchronized boolean await(String value,Runnable waiting){
         String url=key(value);Entry entry=limits.get(url);
         if(entry==null)return true;
-        if(entry.terminal||entry.stale)return false;
+        if(entry.stale||(entry.terminal&&url.equals(source)))return false;
+        if(entry.until-clock.getAsLong()>MAX_WAIT)return false;
         if(entry.until<=clock.getAsLong()){entry.retried=true;return true;}
         if(!visible)return false;
         int version=generation,epoch=entry.epoch;entry.pending++;held++;waiting.run();
         try {
-            while(visible&&generation==version&&entry.epoch==epoch&&!entry.stale&&!entry.terminal){
+            while(visible&&generation==version&&entry.epoch==epoch&&!entry.stale&&!(entry.terminal&&url.equals(source))){
                 long remaining=entry.until-clock.getAsLong();
                 if(remaining<=0){entry.retried=true;return true;}
                 wait(Math.min(remaining,250));
