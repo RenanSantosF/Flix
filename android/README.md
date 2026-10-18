@@ -15,6 +15,11 @@ contexto e cinco categorias aparecem. Não há gravação/exportação de HTML,
 cookies, caminhos, queries, tokens ou mensagens brutas do console. O texto
 copiado pelo site aceita até 1200 caracteres para não cortar essa evidência.
 
+Quando um status visível mostra exatamente Loading ad, o observador registra
+a etapa e não envia aquele vídeo ao fallback nem ao histórico do filme. Não
+modifica, conclui ou pula o anúncio. Um rótulo oculto ou texto semelhante não
+ativa essa proteção; a reprodução normal volta a ser observada após a transição.
+
 Esta versão não é apresentada como correção do servidor alternativo: o teste
 real no aparelho ainda é necessário para obter seu erro anterior ao fallback.
 

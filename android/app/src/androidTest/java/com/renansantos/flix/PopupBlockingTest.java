@@ -342,9 +342,9 @@ public class PopupBlockingTest {
             scenario.onActivity(a->a.testStallDelay(1500));
             load(scenario,"<!doctype html><title>Popup test</title><script>window.lastDiagnostic='';window.addEventListener('flix:diagnostic',function(e){lastDiagnostic=e.detail});</script>");
             waitForJs(scenario,"!!window.FlixControl && !!window.FlixMedia");
-            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));FlixMedia.postMessage(JSON.stringify({videoId:'state:1',event:'state',sourceKind:'https',readyState:0,networkState:2,position:0,duration:0,error:0}));console.error('Mixed Content: insecure video blocked https://cdn.example/private?token=secret');true");
+            js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));FlixMedia.postMessage(JSON.stringify({videoId:'state:1',event:'state',sourceKind:'https',adLoading:true,readyState:0,networkState:2,position:0,duration:0,error:0}));console.error('Mixed Content: insecure video blocked https://cdn.example/private?token=secret');true");
             waitForJs(scenario,"lastDiagnostic.indexOf('sem reprodução')>=0");
-            assertEquals("true",js(scenario,"lastDiagnostic.indexOf('readyState 0')>=0 && lastDiagnostic.indexOf('networkState 2')>=0 && lastDiagnostic.indexOf('conteúdo HTTP bloqueado')>=0 && lastDiagnostic.indexOf('token')<0 && lastDiagnostic.indexOf('cdn.example')<0"));
+            assertEquals("true",js(scenario,"lastDiagnostic.indexOf('Loading ad')>=0 && lastDiagnostic.indexOf('readyState 0')>=0 && lastDiagnostic.indexOf('networkState 2')>=0 && lastDiagnostic.indexOf('conteúdo HTTP bloqueado')>=0 && lastDiagnostic.indexOf('token')<0 && lastDiagnostic.indexOf('cdn.example')<0"));
             AtomicReference<Integer> opens=new AtomicReference<>(-1);scenario.onActivity(a->opens.set(a.nativeOpenCount()));assertEquals(0,(int)opens.get());
         }
     }

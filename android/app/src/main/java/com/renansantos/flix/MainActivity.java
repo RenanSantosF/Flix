@@ -275,6 +275,7 @@ public final class MainActivity extends Activity {
                 if (!video.matches("[a-zA-Z0-9_.:-]{1,100}") || !Double.isFinite(duration) || !Double.isFinite(position) || position < 0 || position > 1e12) return;
                 if(pendingRecovery!=null||(nativePlayback!=null&&nativePlayback.isOpen()))return;
                 if("state".equals(data.optString("event"))) {
+                    if(data.optBoolean("adLoading",false))browserDiagnostics.adLoading();
                     browserDiagnostics.state(data.optString("sourceKind"),data.optInt("readyState",-1),data.optInt("networkState",-1));
                     terminalBrowserError=false;if(!stallArmed){sessionStarted=false;scheduleStallDiagnostic(contextGeneration);}return;
                 }

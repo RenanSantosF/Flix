@@ -7,7 +7,7 @@ function fixture(){
  let time=1000, resources=[], resourceObserver, scan, nextTimer=0;
  const timers=new Map();
  function advance(ms){const until=time+ms;for(;;){const due=[...timers].filter(([,v])=>v.at<=until).sort((a,b)=>a[1].at-b[1].at)[0];if(!due)break;time=due[1].at;timers.delete(due[0]);due[1].fn();}time=until;}
- const messages=[], listeners={};
+ const messages=[], listeners={}, labels=[];
  class Video{
   currentSrc='';src='';readyState=0;duration=NaN;currentTime=0;paused=true;ended=false;error=null;children=[];
   querySelector(){return this.children[0]||null}querySelectorAll(){return this.children}
@@ -18,10 +18,10 @@ function fixture(){
   PerformanceObserver:class{constructor(callback){resourceObserver=callback}observe(){}},
   location:{href:'https://player.example/embed/123?token=private#play'},
   FlixMedia:{postMessage:m=>messages.push(JSON.parse(m))},
-  document:{addEventListener:(name,callback)=>{listeners[name]=callback},querySelectorAll:s=>s==='video'?videos:[]},
+  document:{addEventListener:(name,callback)=>{listeners[name]=callback},querySelectorAll:s=>s==='video'?videos:labels},
   setInterval:callback=>{scan=callback},setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{at:time+delay,fn});return id},clearTimeout:id=>timers.delete(id),addEventListener(){}};
  vm.runInNewContext(observerScript,{window:win,Date:class extends Date{static now(){return time}}});
- return {video,videos,messages,error:(settle=true)=>{video.error={code:4};listeners.error({target:video});if(settle)advance(5000)},
+ return {video,videos,messages,label:(text,visible=true)=>labels.push({textContent:text,getClientRects:()=>visible?[{}]:[]}),clearLabels:()=>{labels.length=0},error:(settle=true)=>{video.error={code:4};listeners.error({target:video});if(settle)advance(5000)},
   resource:(url,initiatorType='fetch',startTime=time)=>{const entry={name:url,initiatorType,startTime};resources.push(entry);resourceObserver({getEntries:()=>[entry]})},
   scan:()=>scan(),advance,emit:name=>listeners[name]?.({target:video})};
 }
@@ -95,4 +95,26 @@ test('an unready video reports bounded state without exposing its source URL or 
  assert.equal(state.event,'state');assert.equal(state.sourceKind,'https');assert.equal(state.readyState,0);assert.equal(state.networkState,2);
  assert.equal(JSON.stringify(state).includes('secret'),false);assert.equal(JSON.stringify(state).includes('cdn.example'),false);
  const count=f.messages.length;f.scan();assert.equal(f.messages.length,count);
+});
+
+
+test('visible Loading ad is diagnostic state and never a native recovery source or movie progress',()=>{
+ const f=fixture();f.label('Loading ad');f.video.src='https://player.example/ad?token=secret';f.video.duration=30;f.video.paused=false;
+ f.advance(3000);f.emit('playing');f.error();
+ assert.ok(f.messages.length>0);assert.ok(f.messages.every(m=>m.event==='state' && m.adLoading===true && !m.source && !m.playing));
+ assert.equal(JSON.stringify(f.messages).includes('secret'),false);
+ f.clearLabels();f.video.error=null;f.video.src='https://cdn.example/movie.mp4';f.video.readyState=4;f.emit('loadstart');f.emit('playing');
+ assert.ok(f.messages.at(-1).playing);
+});
+test('a hidden ad label or unrelated text does not suppress a real movie failure',()=>{
+ for(const [label,visible] of [['Loading ad',false],['The Loading adventures',true]]){
+  const f=fixture();f.label(label,visible);f.video.src='https://cdn.example/movie.mp4';f.error();
+  assert.equal(f.messages.at(-1).source,f.video.src);
+ }
+});
+
+
+test('Loading ad can be reported before the provider creates its video element',()=>{
+ const f=fixture();f.videos.length=0;f.label('Loading ad...');f.advance(3000);f.scan();
+ assert.equal(f.messages.at(-1).adLoading,true);assert.equal(f.messages.at(-1).readyState,-1);assert.equal(f.messages.at(-1).sourceKind,'missing');
 });

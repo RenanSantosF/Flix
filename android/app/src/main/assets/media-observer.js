@@ -7,7 +7,7 @@
       win.__flixMediaObserver = true;
       var ids = new WeakMap(), sourceFailures = new WeakMap(), failedVideos = new WeakMap(), videos = {}, next = 0, lastTime = 0;
       var manifests = [], observer, epochs = new WeakMap(), pending = new WeakMap(), stateTimes = new WeakMap();
-      var recoveryDelay = 5000;
+      var recoveryDelay = 5000, lastAdTime = 0;
       var prefix = Math.random().toString(36).slice(2) + ':';
       // Resource Timing describes requests already made by this frame. Do not fetch,
       // guess URLs or inspect provider internals. Only an unambiguous, recent manifest
@@ -73,17 +73,31 @@
           if ((video.error && video.error.code === 4) || failedSources) send(video, event, sourceError, true);
         }, recoveryDelay);
       }
+      function loadingAdVisible() {
+        // Read only the visible, exact status the user reported; never player internals.
+        try {
+          var labels=win.document.querySelectorAll('.jw-text-alt,.jw-text,[role="status"],[aria-live]');
+          for(var i=0;i<Math.min(labels.length,24);i++) {
+            var label=labels[i],text=String(label.textContent||'').trim();
+            if(text.length>64||!/^loading\s+ad(?:vertisement)?[.\s…]*$/i.test(text))continue;
+            if(label.getClientRects().length && (!win.getComputedStyle || win.getComputedStyle(label).visibility!=='hidden'))return true;
+          }
+        } catch(_) {}
+        return false;
+      }
       function reportState(video) {
         var raw = video.currentSrc || video.src || (video.querySelector('source[src]') || {}).src || '';
-        if (raw && Date.now() - (stateTimes.get(video) || 0) >= 3000) {
+        var adLoading=loadingAdVisible();
+        if ((raw || adLoading) && Date.now() - (stateTimes.get(video) || 0) >= 3000) {
           stateTimes.set(video,Date.now());
-          win.FlixMedia.postMessage(JSON.stringify({videoId:prefix+'state',event:'state',sourceKind:/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',
+          win.FlixMedia.postMessage(JSON.stringify({videoId:prefix+'state',event:'state',sourceKind:!raw?'missing':/^https:/i.test(raw)?'https':/^http:/i.test(raw)?'http':/^blob:/i.test(raw)?'blob':'other',adLoading:adLoading,
             readyState:video.readyState,networkState:video.networkState,position:0,duration:0,error:0}));
         }
       }
       function send(video, event, sourceError, settled) {
         if (!(video instanceof win.HTMLVideoElement)) return;
         var duration = video.duration, live = duration === Infinity, error = sourceError || (video.error ? video.error.code : 0);
+        if (loadingAdVisible()) {cancelRecovery(video);reportState(video);return;}
         if (!error && video.readyState < 3) reportState(video);
         if (!live && !error && (!isFinite(duration) || duration <= 0 || duration > 604800)) return;
         // Give the provider's own error handlers time to replace a temporary source.
@@ -135,7 +149,12 @@
         }, true);
       });
       function scan() {
-        win.document.querySelectorAll('video').forEach(function (video) {
+        var frameVideos=win.document.querySelectorAll('video');
+        if(!frameVideos.length && loadingAdVisible() && Date.now()-lastAdTime>=3000) {
+          lastAdTime=Date.now();
+          win.FlixMedia.postMessage(JSON.stringify({videoId:prefix+'state',event:'state',sourceKind:'missing',adLoading:true,readyState:-1,networkState:-1,position:0,duration:0,error:0}));
+        }
+        frameVideos.forEach(function (video) {
           var failure = failedVideos.get(video);
           if (failure && Date.now() < failure.until) {
             var source = mediaSource(video);

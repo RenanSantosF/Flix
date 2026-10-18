@@ -15,6 +15,7 @@ final class BrowserDiagnostics {
         if(http.size()>=32&&!http.containsKey(url))http.remove(http.keySet().iterator().next());
         http.put(url,code);add("recurso HTTP "+code);
     }
+    synchronized void adLoading(){add("interface exibiu Loading ad");}
     synchronized void blockedFrame(String scheme){add("frame "+("http".equals(scheme)?"HTTP":"externo")+" bloqueado");}
     synchronized void network(int code){if(code>=-16&&code<=-1)add("erro de rede WebView "+code);}
     synchronized void console(String message){
