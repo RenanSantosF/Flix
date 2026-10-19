@@ -14,7 +14,7 @@ function loadSeason(show:number,season:number){
  if(!cache.has(key))cache.set(key,fetch(`/api/season?id=${show}&season=${season}`).then(r=>r.ok?r.json():null).then(d=>Array.isArray(d?.episodes)?d.episodes as Episode[]:null).catch(()=>{cache.delete(key);return null}));
  return cache.get(key)!;
 }
-export default function EpisodeList({show,seasons,season,episode,started,onPick}:{show:number;seasons:Season[];season:number;episode:number;started:boolean;onPick:(season:number,episode:number)=>void}){
+export default function EpisodeList({show,seasons,season,episode,onPick}:{show:number;seasons:Season[];season:number;episode:number;onPick:(season:number,episode:number)=>void}){
  const [browsing,setBrowsing]=useState(season),[episodes,setEpisodes]=useState<Episode[]|null>(null),[failed,setFailed]=useState(false),[marks,setMarks]=useState<Record<string,EpisodeMark>>({});
  useEffect(()=>setBrowsing(season),[season]);
  useEffect(()=>{let live=true;setEpisodes(null);setFailed(false);loadSeason(show,browsing).then(list=>{if(!live)return;if(list)setEpisodes(list);else setFailed(true)});return()=>{live=false}},[show,browsing]);
@@ -34,13 +34,13 @@ export default function EpisodeList({show,seasons,season,episode,started,onPick}
   <ol className="episodes-list">
    {!episodes&&!failed&&Array.from({length:Math.min(count,4)},(_,i)=><li key={'s'+i} className="episode-row is-loading"><div className="episode-thumb"/><div><i/><i/></div></li>)}
    {rows.map(e=>{
-    const current=browsing===season&&e.number===episode,fraction=episodeFraction(marks[`${browsing}:${e.number}`]),done=fraction>=.95;
+    const current=browsing===season&&e.number===episode,fraction=episodeFraction(marks[`${browsing}:${e.number}`]);
     return <li key={e.number}><button type="button" className={'episode-row'+(current?' current':'')} onClick={()=>onPick(browsing,e.number)} aria-current={current?'true':undefined}>
      <div className="episode-thumb">{e.still?<FadeImage src={imageUrl(e.still,'w300')!} alt="" loading="lazy" decoding="async"/>:<span className="episode-number">{e.number}</span>}
       <span className="episode-play"><Icon name="play" size={16}/></span>
       {fraction>0&&<span className="episode-progress"><i style={{width:Math.max(4,fraction*100)+'%'}}/></span>}</div>
      <div className="episode-text"><strong>{e.number}. {e.name}</strong>
-      <small>{current&&started?<b>Assistindo</b>:done?<b className="seen">✓ Assistido</b>:fraction>0?<b>Continuar</b>:null}{e.runtime>0&&<span>{e.runtime}min</span>}</small>
+      {e.runtime>0&&<small><span>{e.runtime}min</span></small>}
       {e.overview&&<p>{e.overview}</p>}</div>
     </button></li>})}
   </ol>

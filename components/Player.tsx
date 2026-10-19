@@ -5,14 +5,14 @@ import PlayerDiagnostic from './PlayerDiagnostic';
 import ProviderFrame from './ProviderFrame';
 import PrerollAd from './PrerollAd';
 import EpisodeList from './EpisodeList';
-import {recordEpisode} from '../lib/episode-progress';
+import {readEpisodes,recordEpisode} from '../lib/episode-progress';
 import {useLibrary} from './Library';
 import {resumePosition,recordPlayback,queueEpisode,readLibrary,timeLabel} from '../lib/watch-library';
 import {imageUrl,titleKey} from '../lib/catalog';
 import type {Title} from '../lib/catalog';
 declare global {interface Window {FlixControl?:{postMessage:(message:string)=>void}}}
 type Season={season_number:number;episode_count:number;name:string};
-export default function Player({type,id,title,seasons,nativeApp=false,autoPlay=false,playRequest=0,back=false,details}:{back?:boolean;details?:React.ReactNode;title:Title;nativeApp?:boolean;type:'movie'|'tv';id:string;seasons:Season[];autoPlay?:boolean;playRequest?:number}){
+export default function Player({type,id,title,seasons,nativeApp=false,autoPlay=false,playRequest=0}:{title:Title;nativeApp?:boolean;type:'movie'|'tv';id:string;seasons:Season[];autoPlay?:boolean;playRequest?:number}){
 const {ready}=useLibrary();
 const [started,setStarted]=useState(false),[notice,setNotice]=useState(''),[reload,setReload]=useState(0),[ended,setEnded]=useState(false);
 const initialized=useRef(false),lastSave=useRef(0),endHandled=useRef(false);
@@ -22,6 +22,8 @@ const [season,setSeason]=useState(first?.season_number??1);
 const [episode,setEpisode]=useState(1);
 const [mediaReady,setMediaReady]=useState(false),[remaining,setRemaining]=useState(Infinity),[countdown,setCountdown]=useState(0),[cancelled,setCancelled]=useState(false);
 const nextRef=useRef<()=>void>(()=>{});
+// Any episode with a partial bar resumes where it stopped, not only the last one in the history.
+const resumeFor=(s:number,e:number)=>{const r=resumePosition(title,s,e);if(r>0||type!=='tv')return r;const m=readEpisodes(title.id)[`${s}:${e}`];return m&&m.position/m.duration<.95?m.position:0;};
 // The pre-roll plays once per visit, before the first content load; episode changes go straight to content.
 const [adDone,setAdDone]=useState(false);
 const playing=started&&adDone;
@@ -37,7 +39,7 @@ if(autoPlay){setStarted(true);setTimeout(()=>document.getElementById('assistir')
 useEffect(()=>{if(playRequest>0){setStarted(true);setEnded(false)}},[playRequest]);
 useEffect(()=>{
 if(!playing||!initialized.current)return;
-const resume=resumePosition(title,season,episode);lastSave.current=0;setEnded(false);setRemaining(Infinity);setCountdown(0);setCancelled(false);setNotice('');setMediaReady(false);endHandled.current=false;
+const resume=resumeFor(season,episode);lastSave.current=0;setEnded(false);setRemaining(Infinity);setCountdown(0);setCancelled(false);setNotice('');setMediaReady(false);endHandled.current=false;
 window.FlixControl?.postMessage(JSON.stringify({type:'context',key:titleKey(title),title:title.title,season,episode,resume}));
 return()=>{window.FlixControl?.postMessage(JSON.stringify({type:'clear'}));};
 },[playing,title,season,episode,reload]);
@@ -75,15 +77,15 @@ const offerNext=playing&&type==='tv'&&!!nextLabel&&(ended||remaining<=40);
 useEffect(()=>{if(!playing||type!=='tv')return;window.FlixControl?.postMessage(JSON.stringify({type:'next',label:nextLabel}));return()=>window.FlixControl?.postMessage(JSON.stringify({type:'next',label:''}))},[playing,type,nextLabel]);
 useEffect(()=>{const go=()=>nextRef.current();window.addEventListener('flix:next',go);return()=>window.removeEventListener('flix:next',go)},[]);
 useEffect(()=>{if(!ended||!offerNext||cancelled)return;setCountdown(8);const timer=setInterval(()=>setCountdown(n=>{if(n<=1){clearInterval(timer);nextRef.current();return 0}return n-1}),1000);return()=>clearInterval(timer)},[ended,offerNext,cancelled]);
-const resumeAt=ready&&!started?resumePosition(title,season,episode):0;
+const resumeAt=ready&&!started?resumeFor(season,episode):0;
 
 return <section className="playerSection" id="assistir">
-<div className="player-identity-bar">{back&&<button type="button" className="player-back" aria-label="Voltar" onClick={()=>{if(history.length>1)history.back();else location.assign('/')}}><Icon name="back" size={20}/></button>}<span className="wordmark">FLIX<span>·</span></span><span>{type==='tv'?`T${season} · EPISÓDIO ${episode}`:mediaReady?'APROVEITE A SESSÃO':'SUA SESSÃO COMEÇA AQUI'}</span></div>
-<div className={'videoFrame'+(playing&&!mediaReady?' server-selection':'')} id="player-frame">{!started?<button type="button" className="player-cover" aria-label={(resumeAt>0?'Continuar ':'Assistir ')+title.title} onClick={()=>setStarted(true)}>{title.backdrop_path&&<img src={imageUrl(title.backdrop_path,'w1280')} alt=""/>}<span className="player-cover-shade"/><span className="player-cover-play"><i><Icon name="play" size={26}/></i>{resumeAt>0?'Continuar':'Assistir'}</span><span className="player-cover-hint">{resumeAt>0?`De onde parou · ${timeLabel(resumeAt)}`:type==='tv'?`Temporada ${season} · Episódio ${episode}`:'Toque para começar'}</span></button>:!adDone?<PrerollAd onDone={()=>setAdDone(true)}/>:<ProviderFrame key={src+":"+reload} src={src} title="Reprodutor SuperFlixAPI" sessionKey={titleKey(title)} season={season} episode={episode} onReconnect={()=>setReload(n=>n+1)}/>}
+<div className="player-identity-bar"><span className="wordmark">FLIX<span>·</span></span><span>{type==='tv'?`T${season} · EPISÓDIO ${episode}`:mediaReady?'APROVEITE A SESSÃO':'SUA SESSÃO COMEÇA AQUI'}</span></div>
+<div className={'videoFrame'+(playing&&!mediaReady?' server-selection':'')} id="player-frame">{!started?<button type="button" className="player-cover minimal" aria-label={(resumeAt>0?'Continuar ':'Assistir ')+title.title} onClick={()=>setStarted(true)}>{title.backdrop_path&&<img src={imageUrl(title.backdrop_path,'w780')} alt=""/>}<span className="player-cover-shade"/><span className="cover-play"><Icon name="play" size={24}/></span><span className="cover-caption">{resumeAt>0?`Continuar · ${timeLabel(resumeAt)}`:type==='tv'?`T${season} · Episódio ${episode}`:'Assistir'}</span></button>:!adDone?<PrerollAd onDone={()=>setAdDone(true)}/>:<ProviderFrame key={src+":"+reload} src={src} title="Reprodutor SuperFlixAPI" sessionKey={titleKey(title)} season={season} episode={episode} onReconnect={()=>setReload(n=>n+1)}/>}
 {offerNext&&<div className={'next-episode'+(ended?' ended':'')}><button type="button" onClick={nextEpisode}><span className="next-episode-fill" style={{transform:`scaleX(${ended?(cancelled?1:(8-countdown)/8):Math.min(1,Math.max(0,1-remaining/40))})`}}/><Icon name="next" size={18}/><span><small>{ended&&countdown>0?`Começa em ${countdown}s`:'Próximo episódio'}</small><b>{nextLabel}</b></span></button>{ended&&countdown>0&&<button type="button" className="next-episode-cancel" onClick={()=>{setCancelled(true);setCountdown(0)}} aria-label="Cancelar próximo episódio">Cancelar</button>}</div>}</div>
 {playing&&<div className="player-controls">{type==='tv'&&<><button className="button button-glass" disabled={episode<=1} onClick={()=>{setEpisode(e=>Math.max(1,e-1));setEnded(false)}}><Icon name="back" size={16}/>Anterior</button><button className={'button '+(ended&&hasNext?'button-accent':'button-glass')} disabled={!hasNext} onClick={nextEpisode}><Icon name="next" size={16}/>Próximo</button></>}{nativeApp&&<button className="button button-glass" onClick={()=>window.FlixControl?.postMessage(JSON.stringify({type:'cast'}))}><Icon name="cast" size={18}/>Transmitir para TV</button>}{nativeApp&&<button className="button button-glass pip-button" onClick={floatPlayer}><Icon name="pip" size={17}/>Janela flutuante</button>}<button className="icon-button" aria-label="Recarregar vídeo" title="Recarregar vídeo" onClick={()=>setReload(n=>n+1)}><Icon name="refresh" size={17}/></button></div>}
 {notice&&<p className="player-notice" role="status">{notice}</p>}
 {nativeApp&&playing&&<PlayerDiagnostic resetKey={src+reload}/>}
 {nativeApp&&playing&&<p className="player-status"><i/>Reprodução protegida · use a janela flutuante para assistir em outros apps</p>}
-{details}{type==='tv'&&<EpisodeList show={title.id} seasons={available.length?available:[{season_number:1,episode_count:1,name:'Temporada 1'}]} season={season} episode={episode} started={playing} onPick={(s,e)=>{setSeason(s);setEpisode(e);setEnded(false);setStarted(true);document.getElementById('assistir')?.scrollIntoView({behavior:'smooth',block:'start'})}}/>}</section>;
+{type==='tv'&&<EpisodeList show={title.id} seasons={available.length?available:[{season_number:1,episode_count:1,name:'Temporada 1'}]} season={season} episode={episode} onPick={(s,e)=>{setSeason(s);setEpisode(e);setEnded(false);setStarted(true);document.getElementById('assistir')?.scrollIntoView({behavior:'smooth',block:'start'})}}/>}</section>;
 }
