@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {reportAd} from '../lib/ad-client';
+import FadeImage from './FadeImage';
 export type Sponsored={token:string;image:string;name:string;advertiser:string;message:string};
 // One request per page load; every rail on the page shares the same distinct draw.
 let pending:Promise<Sponsored[]>|null=null;
@@ -30,7 +31,7 @@ export function SponsoredPoster({item}:{item:Sponsored}){
  const label=item.advertiser||item.name;
  return <article ref={card} className="poster-card sponsored-card">
   <button type="button" className="poster-link" aria-label={`Anúncio: ${label}`} onClick={()=>{setOpen(true);if(!seen.current){seen.current=true;reportAd(item.token,'impression')}if(!clicked.current){clicked.current=true;reportAd(item.token,'click')}}}>
-   <div className="poster-art"><img src={item.image} alt="" loading="lazy" decoding="async" onError={()=>setFailed(true)}/><span className="sponsored-badge">Patrocinado</span></div>
+   <div className="poster-art"><FadeImage src={item.image} alt="" loading="lazy" decoding="async" onError={()=>setFailed(true)}/><span className="sponsored-badge">Patrocinado</span></div>
    <h3>{label}</h3><p>Anúncio</p>
   </button>
   {open&&<div className="sponsored-sheet" role="dialog" aria-modal="true" aria-label={label} onClick={()=>setOpen(false)}>

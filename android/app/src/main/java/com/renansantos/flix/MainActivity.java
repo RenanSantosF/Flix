@@ -27,7 +27,6 @@ import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import androidx.webkit.JavaScriptReplyProxy;
 import androidx.webkit.WebViewCompat;
@@ -53,7 +52,6 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     private WebView browser;
     private FrameLayout root, normal;
     private LinearLayout errorPanel;
-    private ProgressBar progress;
     private View customView;
     private FullscreenPlayerLayout fullscreenPlayer;
     private WebChromeClient.CustomViewCallback customViewCallback;
@@ -66,7 +64,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     private JavaScriptReplyProxy activeReply;
     private NativePlayback nativePlayback;
     private CastController cast;
-    private String castToken="",contextTitle="Flix";
+    private String castToken="",contextTitle="Flix",nextLabel="";
     private String testCastSource="";
     private final BrowserDiagnostics browserDiagnostics=new BrowserDiagnostics();
     private final BrowserMediaRetry browserRetry=new BrowserMediaRetry();
@@ -112,10 +110,6 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         browser = new WebView(this);
         browser.setBackgroundColor(Color.rgb(11, 11, 15));
         normal.addView(browser, new FrameLayout.LayoutParams(-1, -1));
-        progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setMax(100);
-        progress.setProgressTintList(android.content.res.ColorStateList.valueOf(Color.rgb(244, 63, 98)));
-        normal.addView(progress, new FrameLayout.LayoutParams(-1, dp(2), Gravity.TOP));
         createErrorPanel();
         configureBrowser();
         configureMediaBridge();
@@ -151,9 +145,6 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                 if(!contextKey.isEmpty())browserDiagnostics.console(message.message(),message.sourceId(),message.lineNumber(),message.messageLevel()==ConsoleMessage.MessageLevel.ERROR);
                 return true; // Do not forward provider URLs/tokens from console messages to logcat.
             }
-            @Override public void onProgressChanged(WebView view, int value) {
-                progress.setProgress(value); progress.setVisibility(value == 100 || isInPictureInPictureMode() ? View.GONE : View.VISIBLE);
-            }
             @Override public boolean onCreateWindow(WebView view, boolean dialog, boolean userGesture, Message resultMsg) {
                 // Preserve the popup containment that already works on the user's device.
                 blockedPopups.incrementAndGet();
@@ -184,7 +175,9 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                     public void pip(){enterPlayerPip();}
                     public void cast(){openCast();}
                     public void seekTo(double seconds){seekVideoTo(seconds);}
+                    public void next(){exitFullscreen();browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:next'))",null);}
                 });
+                fullscreenPlayer.setNext(nextLabel);
                 fullscreenPlayer.playing(playbackActive);fullscreenPlayer.progress(lastPosition,lastDuration);syncFullscreenOwner();
                 root.addView(fullscreenPlayer, new FrameLayout.LayoutParams(-1, -1));
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
@@ -250,7 +243,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
             }
             @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
                 if(!contextKey.isEmpty())browserDiagnostics.network(error.getErrorCode(),request.getUrl().toString(),requestDestination(request),String.valueOf(error.getDescription()));
-                if (request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); progress.setVisibility(View.GONE); }
+                if (request.isForMainFrame()) { errorPanel.setVisibility(View.VISIBLE); }
             }
         });
         browser.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> noteBlockedNavigation());
@@ -308,6 +301,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                     if(pendingRecovery!=null&&pendingToken.equals(data.optString("token"))) {Runnable open=pendingRecovery;pendingRecovery=null;pendingToken="";activeReply=null;open.run();}
                 }
                 else if ("pip".equals(type)) enterPlayerPip();
+                else if ("next".equals(type)) { String label=data.optString("label",""); nextLabel=label.substring(0,Math.min(40,label.length())); if(fullscreenPlayer!=null)fullscreenPlayer.setNext(nextLabel); }
                 else if ("cast".equals(type)) openCast();
                 else if ("context".equals(type)) {
                     String key = data.optString("key"); if (!NavigationPolicy.isPlaybackKey(key)) return;
@@ -576,7 +570,6 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     @Override public void onPictureInPictureModeChanged(boolean inPip, Configuration config) {
         super.onPictureInPictureModeChanged(inPip, config);
         enteringPip = false;
-        progress.setVisibility(View.GONE);
         if (inPip) { if(fullscreenPlayer!=null)fullscreenPlayer.pip(true);root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
         else { restoreInlineLayout(); root.requestApplyInsets(); }
     }
