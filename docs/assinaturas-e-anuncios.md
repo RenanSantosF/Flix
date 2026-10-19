@@ -78,10 +78,9 @@ segredo do webhook e ID do preço mensal. Não enviar chaves secretas pelo chat.
 
 ## Anúncios de vídeo com botão Pular
 
-Google IMA é um SDK de reprodução/medição de publicidade. **Instalá-lo não
-aprova o app em uma rede, não fornece campanhas pagantes e não garante receita.**
-Precisamos de conta de publisher aprovada, inventário aceito e uma tag VAST/VMAP
-de produção emitida por um ad server/rede que aceite este conteúdo e aplicativo.
+### Implementado: pré-roll com painel
+
+Ver `docs/anuncios-guia.md`. O texto abaixo é o plano original com Google IMA.
 
 1. Abrir conta com rede/ad server compatível e cadastrar site/aplicativo e
    inventário de vídeo. Confirmar elegibilidade e condições de monetização.
