@@ -150,3 +150,31 @@ button.player-cover:active .player-cover-play{transform:scale(.96)}
 @keyframes next-in{from{opacity:0;transform:translateY(14px) scale(.95)}to{opacity:1;transform:none}}
 @keyframes next-breathe{50%{box-shadow:0 12px 32px #000a,0 0 0 6px #ffffff22}}
 @media (prefers-reduced-motion:reduce){.next-episode,.next-episode button{animation:none!important}}
+.title-page{padding-top:env(safe-area-inset-top)}
+.title-page .playerSection{margin-top:10px}
+.player-back{display:grid;place-items:center;width:36px;height:36px;margin:-6px 4px -6px -6px;border:0;border-radius:50%;background:#ffffff12;color:#fff;cursor:pointer;flex:0 0 auto}
+.player-back:active{transform:scale(.94)}
+.player-identity-bar>.wordmark{margin-right:auto}
+.episodes{margin-top:22px}
+.episodes-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}.episodes-head h2{margin:0;font-size:18px}.episodes-head span{font-size:11px;color:var(--muted)}
+.season-chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;margin:0 calc(var(--gutter)*-1) 14px;padding:0 var(--gutter)}
+.season-chips button{flex:0 0 auto;min-height:36px;padding:8px 14px;border-radius:99px;border:1px solid #ffffff22;background:#ffffff08;color:#d6d6e0;font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:background .2s,color .2s}
+.season-chips button.selected{background:#fff;color:#111;border-color:#fff}
+.episodes-list{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.episode-row{display:grid;grid-template-columns:132px minmax(0,1fr);gap:12px;align-items:start;width:100%;padding:8px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:background .2s}
+.episode-row:hover,.episode-row:focus-visible{background:#ffffff08}
+.episode-row.current{background:#f43f6214;box-shadow:inset 0 0 0 1px #f43f6244}
+.episode-thumb{position:relative;aspect-ratio:16/9;border-radius:8px;overflow:hidden;background:#191922}
+.episode-thumb:has(.fade-img:not(.is-shown)),.episode-row.is-loading .episode-thumb{background:linear-gradient(110deg,#17171f 30%,#262631 50%,#17171f 70%) 0 0/250% 100%;animation:poster-shimmer 1.4s linear infinite}
+.episode-thumb img{width:100%;height:100%;object-fit:cover}
+.episode-number{position:absolute;inset:0;display:grid;place-items:center;font-size:26px;font-weight:900;color:#ffffff40}
+.episode-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#000a;border:1px solid #ffffff55;color:#fff;opacity:.9}
+.episode-row.current .episode-play{background:var(--accent);border-color:var(--accent)}
+.episode-progress{position:absolute;left:0;right:0;bottom:0;height:4px;background:#ffffff33}.episode-progress i{display:block;height:100%;background:var(--accent);border-radius:0 2px 2px 0}
+.episode-text{display:grid;gap:4px;min-width:0;padding-top:2px}
+.episode-text strong{font-size:13px;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.episode-text small{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted)}.episode-text small b{color:#ff8fa3;font-weight:700}.episode-text small b.seen{color:#8fd6a8}
+.episode-text p{margin:0;font-size:11px;line-height:1.5;color:#9a9aac;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.episode-row.is-loading{display:grid;grid-template-columns:132px 1fr;gap:12px;padding:8px}.episode-row.is-loading>div:last-child{display:grid;gap:8px;padding-top:4px}.episode-row.is-loading i{display:block;height:10px;border-radius:5px;background:#1e1e27}.episode-row.is-loading i+i{width:60%}
+@media(min-width:700px){.episode-row{grid-template-columns:200px minmax(0,1fr)}.episode-text strong{font-size:14px}.episode-text p{font-size:12px}}
+.playerSection .detail-info{padding:18px 0 4px}
