@@ -3,7 +3,7 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import Icon from './Icons';
 import PlayerDiagnostic from './PlayerDiagnostic';
 import ProviderFrame from './ProviderFrame';
-import PrerollAd,{prerollEnabled} from './PrerollAd';
+import PrerollAd from './PrerollAd';
 import {useLibrary} from './Library';
 import {resumePosition,recordPlayback,queueEpisode,readLibrary} from '../lib/watch-library';
 import {imageUrl,titleKey} from '../lib/catalog';
@@ -20,7 +20,7 @@ const [season,setSeason]=useState(first?.season_number??1);
 const [episode,setEpisode]=useState(1);
 const [mediaReady,setMediaReady]=useState(false);
 // The pre-roll plays once per visit, before the first content load; episode changes go straight to content.
-const [adDone,setAdDone]=useState(!prerollEnabled);
+const [adDone,setAdDone]=useState(false);
 const playing=started&&adDone;
 useEffect(()=>{
 if(!ready||initialized.current)return;initialized.current=true;

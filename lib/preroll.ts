@@ -1,7 +1,5 @@
 export type MediaCandidate={url:string;type:string;width:number;height:number};
-export type PrerollAd={video:string;skipAfter:number;offset?:string;impressions:string[];events:Record<string,string[]>};
 const DEFAULT_SKIP=5;
-export function clampSkip(value?:string|number|null){const n=Number(value);return Number.isFinite(n)&&n>=0?Math.min(30,Math.round(n)):DEFAULT_SKIP;}
 // VAST skipoffset: "HH:MM:SS(.mmm)" or "NN%". Without one, the Flix default applies.
 export function skipSeconds(offset:string|null|undefined,duration:number,fallback=DEFAULT_SKIP){
  const value=(offset||'').trim();
