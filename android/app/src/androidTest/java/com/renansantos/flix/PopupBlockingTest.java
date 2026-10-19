@@ -671,9 +671,11 @@ public class PopupBlockingTest {
         org.junit.Assume.assumeTrue("Production UI runs after merge", "true".equals(InstrumentationRegistry.getArguments().getString("liveCatalog")));
         try (ActivityScenario<MainActivity> scenario = launch()) {
             scenario.onActivity(a->a.testBrowser().loadUrl(NavigationPolicy.HOME + "titulo/tv/1396"));
-            waitForJs(scenario, "document.querySelectorAll('.selectors select').length===2");
-            assertEquals("0", js(scenario, "document.querySelectorAll('.episode-list,.player-options').length"));
-            js(scenario, "document.querySelector('.player-cover button').click();true");
+            // One picker: season chips plus the episode list, no legacy selects.
+            waitForJs(scenario, "document.querySelectorAll('.episodes').length===1 && document.querySelectorAll('.episodes-list .episode-row').length>0");
+            assertEquals("0", js(scenario, "document.querySelectorAll('.selectors select,.episode-list,.player-options').length"));
+            // A recent pre-roll suppresses the next one, so this check never counts views on real campaigns.
+            js(scenario, "localStorage.setItem('flix-ad-last',Date.now()+':1440');document.querySelector('button.player-cover').click();true");
             waitForJs(scenario, "!!document.querySelector('.videoFrame.server-selection iframe')");
             assertEquals("true", js(scenario, "document.querySelector('.videoFrame').getBoundingClientRect().height>=390"));
             assertEquals("true", js(scenario, "document.querySelector('.videoFrame iframe').src.endsWith('#noEpList')"));
