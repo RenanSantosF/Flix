@@ -78,6 +78,22 @@ segredo do webhook e ID do preço mensal. Não enviar chaves secretas pelo chat.
 
 ## Anúncios de vídeo com botão Pular
 
+### Implementado: pré-roll próprio (VAST ou MP4)
+
+`components/PrerollAd.tsx` toca um vídeo antes do primeiro carregamento do
+player de filmes e séries, com contador e botão “Pular anúncio”. A fonte é
+configurada na Vercel (ver `.env.example`):
+
+- `NEXT_PUBLIC_PREROLL_VAST_URL`: tag VAST de uma rede de vídeo. Segue até 4
+  wrappers, toca o MediaFile MP4/WebM HTTPS mais próximo de 854px, respeita o
+  `skipoffset` da tag e dispara Impression, start, quartis, complete e skip.
+  VPAID/JavaScript não é executado. A rede precisa liberar CORS para o domínio.
+- `NEXT_PUBLIC_PREROLL_VIDEO_URL`: MP4 de anunciante direto, sem rede.
+
+O anúncio não abre o anunciante ao toque. Sem inventário, erro, bloqueio ou
+12 s sem iniciar, o conteúdo começa normalmente. Troca de episódio não repete o
+anúncio; recarregar a página sim. Ao vivo ainda não tem pré-roll.
+
 Google IMA é um SDK de reprodução/medição de publicidade. **Instalá-lo não
 aprova o app em uma rede, não fornece campanhas pagantes e não garante receita.**
 Precisamos de conta de publisher aprovada, inventário aceito e uma tag VAST/VMAP
