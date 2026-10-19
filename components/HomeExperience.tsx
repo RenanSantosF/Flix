@@ -1,5 +1,5 @@
 'use client';
-import {useEffect,useRef,useState} from 'react';
+import {Fragment,useEffect,useRef,useState} from 'react';
 import Link from 'next/link';
 import {Header,BottomNav} from './AppShell';
 import Icon from './Icons';
@@ -8,6 +8,7 @@ import {imageUrl,titleHref,titleKey} from '../lib/catalog';
 import type {Title} from '../lib/catalog';
 import type {DiscoveryShelf} from '../lib/discovery';
 import DiscoveryGrid from './DiscoveryGrid';
+import {SponsoredPoster,useSponsoredPosters} from './SponsoredPoster';
 type Props={movies:Title[];films:Title[];series:Title[];shelves:DiscoveryShelf[];configured:boolean;initialView:'home'|'search'|'list'};
 export default function Home({movies,films,series,shelves,configured,initialView}:Props) {
   const {favorites,history,ready}=useLibrary();
@@ -32,7 +33,10 @@ export default function Home({movies,films,series,shelves,configured,initialView
   const continuing=history.filter(h=>!h.completed);
   const feature=(filter==='movie'?films:filter==='tv'?series:movies).find(t=>t.backdrop_path);
   const filtered=(titles:Title[])=>filter==='all'?titles:titles.filter(t=>t.media_type===filter);
-  function rail(label:string,titles:Title[],rank=false,id?:string){return titles.length>0&&<section className="shelf" id={id}><div className="section-heading"><h2>{label}</h2><span>{titles.length} títulos · deslize</span></div><div className="poster-rail">{titles.map((title,index)=><PosterCard key={titleKey(title)} title={title} index={rank?index:undefined}/>)}</div></section>}
+  const sponsored=useSponsoredPosters();
+  // Sponsored posters sit fourth in every other unranked rail, so they never lead a row or crowd one.
+  let railCount=0;
+  function rail(label:string,titles:Title[],rank=false,id?:string){if(!titles.length)return false;const n=rank?-1:railCount++,ad=n>=0&&n%2===0?sponsored[n/2]:undefined;return <section className="shelf" id={id}><div className="section-heading"><h2>{label}</h2><span>{titles.length} títulos · deslize</span></div><div className="poster-rail">{titles.map((title,index)=><Fragment key={titleKey(title)}>{ad&&index===3&&<SponsoredPoster item={ad}/>}<PosterCard title={title} index={rank?index:undefined}/></Fragment>)}</div></section>}
   return <main className="app-page"><Header/>
     {view==='home'&&<><div className="browse-tabs" role="group" aria-label="Filtrar catálogo">{([{id:'all',label:'Para você'},{id:'movie',label:'Filmes'},{id:'tv',label:'Séries'}] as const).map(tab=><button type="button" key={tab.id} className={filter===tab.id?'selected':''} aria-pressed={filter===tab.id} onClick={()=>{setFilter(tab.id);setPage(1)}}>{tab.label}</button>)}<Link href="/ao-vivo" className="live-tab"><Icon name="live" size={15}/> Ao vivo</Link></div>
     {feature&&<section className="feature-hero" key={titleKey(feature)}><img className="feature-image" src={imageUrl(feature.backdrop_path,'w1280')} alt="" fetchPriority="high"/><div className="feature-shade"/><div className="feature-copy"><span className="feature-badge"><span/> EM DESTAQUE</span><div className="feature-meta"><span>{feature.media_type==='tv'?'SÉRIE':'FILME'}</span><span>{feature.release_date?.slice(0,4)}</span>{!!feature.vote_average&&<span className="rating">★ {feature.vote_average.toFixed(1)}</span>}</div><h1>{feature.title}</h1><p>{feature.overview}</p><div className="feature-actions"><Link className="button button-light" href={titleHref(feature)+'?play=1'}><Icon name="play" size={19}/>Assistir</Link><FavoriteButton title={feature} compact/><Link className="feature-info" href={titleHref(feature)}>Detalhes <Icon name="chevron" size={16}/></Link></div></div><span className="feature-index">ESCOLHA DO DIA <i/></span></section>}

@@ -49,8 +49,8 @@ export function readToken(token:string,now=Date.now()){
 export async function recordEvent(token:string,event:AdEvent){
  const id=readToken(token);if(!id||!AD_EVENTS.includes(event))return false;
  const nonce=token.split('.')[2];
- // Only the first impression and the first ending (complete/skip/error) of a delivery count.
- const slot=event==='impression'?'i':'e';
+ // Only the first impression, first tap and first ending (complete/skip/error) of a delivery count.
+ const slot=event==='impression'?'i':event==='click'?'c':'e';
  const [fresh]=await pipeline([['SET',`ads:seen:${nonce}:${slot}`,'1','NX','EX',7200]]);if(fresh!=='OK')return false;
  const field=eventField(event),day=dayKey();
  await pipeline([['HINCRBY','ads:t:'+id,field,1],['HINCRBY',`ads:d:${id}:${day}`,field,1],['EXPIRE',`ads:d:${id}:${day}`,400*86400]]);

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {amountDue,campaignStatus,cleanCampaign,cleanSettings,eligible,pickCampaign} from '../lib/ad-campaigns.ts';
+import {amountDue,campaignStatus,cleanCampaign,cleanSettings,eligible,pickCampaign,pickSeveral,slotCampaigns,slotEnabled} from '../lib/ad-campaigns.ts';
 const base={name:'A',url:'https://cdn.example/a.mp4',weight:1};
 const make=(over={},id='a')=>{const c=cleanCampaign({...base,...over},id,1);if('error' in c)throw Error(c.error);return c;};
 test('campaign input is validated and clamped',()=>{
@@ -10,7 +10,7 @@ test('campaign input is validated and clamped',()=>{
  assert.match(cleanCampaign({...base,startsAt:'2026-02-01',endsAt:'2026-01-01'},'x').error,/anterior/);
  const c=make({weight:500,skipAfter:99,cpm:'12.345',kind:'other'});
  assert.deepEqual([c.weight,c.skipAfter,c.cpm,c.kind,c.active],[100,30,12.35,'video',true]);
- assert.deepEqual(cleanSettings({minutesBetween:-5,defaultSkip:90}),{enabled:true,minutesBetween:0,defaultSkip:30});
+ assert.deepEqual(cleanSettings({minutesBetween:-5,defaultSkip:90}),{enabled:true,liveEnabled:true,postersEnabled:true,minutesBetween:0,defaultSkip:30});
 });
 test('eligibility follows pause, dates and impression cap',()=>{
  assert.equal(eligible(make({active:false}),0,'2026-10-19'),false);
@@ -30,3 +30,15 @@ test('weighted draw picks by share and skips ineligible campaigns',()=>{
  assert.ok(seen.b/seen.a>2.5&&seen.b/seen.a<3.5);
 });
 test('amount due is impressions times price per thousand',()=>{assert.equal(amountDue(2500,20),50);assert.equal(amountDue(1,15),0.02);});
+test('poster campaigns keep their message and only fill poster slots',()=>{
+ const poster=make({kind:'poster',url:'https://cdn.example/p.jpg',message:'x'.repeat(300)},'p'),video=make({},'v'),vast=make({kind:'vast'},'n');
+ assert.equal(poster.message.length,160);assert.equal(video.message,'');
+ assert.deepEqual(slotCampaigns([poster,video,vast],'poster').map(c=>c.id),['p']);
+ assert.deepEqual(slotCampaigns([poster,video,vast],'live').map(c=>c.id),['v','n']);
+ const s=cleanSettings({liveEnabled:false});assert.deepEqual([slotEnabled(s,'preroll'),slotEnabled(s,'live'),slotEnabled(s,'poster')],[true,false,true]);
+});
+test('several posters are drawn without repeating',()=>{
+ const list=['a','b','c'].map(id=>make({kind:'poster',url:'https://x/p.jpg'},id));
+ const picked=pickSeveral(list,{},5,'2026-10-19');assert.equal(picked.length,3);assert.equal(new Set(picked.map(c=>c.id)).size,3);
+ assert.equal(pickSeveral([],{},3).length,0);
+});

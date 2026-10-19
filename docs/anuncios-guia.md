@@ -1,7 +1,8 @@
 # Guia: anúncios em vídeo no Flix
 
-Antes de cada filme ou série aparece um vídeo de anúncio com contador e botão
-“Pular”. Você cadastra quantas campanhas quiser no painel; a cada exibição o
+Antes de cada filme, série ou transmissão ao vivo aparece um vídeo de anúncio
+com contador e botão “Pular”. No catálogo, algumas fileiras podem ter uma capa
+patrocinada, marcada como “Patrocinado”. Você cadastra quantas campanhas quiser no painel; a cada exibição o
 Flix sorteia uma delas. O site e o app Android usam o mesmo sistema, sem
 atualizar o APK.
 
@@ -81,10 +82,28 @@ normalmente aceitam. Se nunca aparecer anúncio da rede, teste outra zona ou red
 
 Você pode misturar: ex. Pizzaria peso 3 + Rede peso 1 → 75% / 25%.
 
+## Parte 3b — Capa patrocinada no catálogo
+
+Uma imagem no formato das capas de filme aparece em algumas fileiras da tela
+inicial (na 4ª posição de fileiras alternadas, nunca em todas), com o selo
+**Patrocinado**. Ao tocar, abre uma janela dentro do Flix com a imagem grande e
+o texto do anunciante; ninguém é levado para outro site.
+
+1. Peça ao anunciante uma imagem **vertical 2:3** (ex.: 600×900 px, JPG/PNG).
+2. Envie ao Vercel Blob (mesmo caminho do vídeo) e copie a URL.
+3. No painel → **+ Nova campanha** → **Tipo:** Capa patrocinada → cole a URL.
+4. **Texto ao tocar na capa:** ex. “Peça pelo WhatsApp (11) 99999-0000 · 10%
+   off com o código FLIX”.
+5. Preço por mil, datas e limite funcionam como no vídeo.
+
+Exibição conta quando metade da capa fica 1 segundo na tela. **Toques** mostra
+quantas pessoas abriram o anúncio. Até 3 capas diferentes por visita.
+
 ## Parte 4 — Controle geral (aba Ajustes)
 
-- **Mostrar anúncios antes dos vídeos:** desliga tudo de uma vez.
-- **Intervalo mínimo entre anúncios:** ex. 30 → quem viu um anúncio não vê
+- **Vídeo antes de filmes e séries**, **Vídeo antes das transmissões ao vivo**
+  e **Capas patrocinadas no catálogo:** liga/desliga cada lugar separadamente.
+- **Intervalo mínimo entre vídeos de anúncio** (vale para filmes e ao vivo juntos): ex. 30 → quem viu um anúncio não vê
   outro pelos próximos 30 minutos naquele aparelho. 0 = a cada vídeo aberto.
 - **Pular liberado após:** segundos até o botão “Pular” (0 a 30).
 
@@ -94,7 +113,7 @@ Campanhas.
 ## Perguntas comuns
 
 - **Troca de episódio mostra anúncio?** Não; só ao abrir o player na página.
-- **Ao vivo tem anúncio?** Ainda não.
+- **Ao vivo tem anúncio?** Sim, ao abrir a transmissão. Trocar de canal na mesma tela não repete.
 - **Esqueci a senha:** troque `ADMIN_PASSWORD` na Vercel e faça Redeploy. Todas
   as sessões abertas do painel saem automaticamente.
 - **Os números somem?** Totais ficam guardados para sempre; a contagem diária
