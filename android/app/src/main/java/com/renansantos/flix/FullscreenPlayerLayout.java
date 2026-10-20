@@ -97,6 +97,7 @@ final class FullscreenPlayerLayout extends FrameLayout {
     void playing(boolean playing){toggle.setImageDrawable(new PlayerGlyph(playing?"pause":"play",Color.BLACK));toggle.setContentDescription(playing?"Pausar vídeo":"Reproduzir vídeo");toggle.setTooltipText(toggle.getContentDescription());}
     void pip(boolean active){pip=active;removeCallbacks(hide);feedback.setVisibility(GONE);if(active){showNext(false);for(View v:new View[]{top,transport,timeline,unlock,hint,shade}){v.animate().cancel();v.setVisibility(GONE);}activity.setRequestedOrientation(previousOrientation);restoreBrightness();}else{activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);immersive();showControls();}}
     void release(){if(released)return;released=true;removeCallbacks(hide);for(View v:new View[]{top,transport,timeline,unlock,hint,shade,nextButton})v.animate().cancel();restoreBrightness();activity.setRequestedOrientation(previousOrientation);activity.getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);}
+    private boolean overControl(MotionEvent event){for(View v:new View[]{top,transport,timeline,nextButton,unlock})if(v.getVisibility()==VISIBLE&&event.getX()>=v.getLeft()&&event.getX()<=v.getRight()&&event.getY()>=v.getTop()&&event.getY()<=v.getBottom())return true;return false;}
     private void restoreBrightness(){WindowManager.LayoutParams params=activity.getWindow().getAttributes();params.screenBrightness=previousBrightness;activity.getWindow().setAttributes(params);}
     @Override public boolean dispatchTouchEvent(MotionEvent event){
         if(pip)return super.dispatchTouchEvent(event);
@@ -112,7 +113,9 @@ final class FullscreenPlayerLayout extends FrameLayout {
                 if(volumeSide){int max=audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC),value=Math.max(0,Math.min(max,Math.round(startVolume+delta*max)));if(!audio.isVolumeFixed())try{audio.setStreamVolume(AudioManager.STREAM_MUSIC,value,0);}catch(SecurityException ignored){}label="Volume "+Math.round(value*100f/Math.max(1,max))+"%";}
                 else{WindowManager.LayoutParams params=activity.getWindow().getAttributes();params.screenBrightness=Math.max(.05f,Math.min(1,startBrightness+delta));activity.getWindow().setAttributes(params);label="Brilho "+Math.round(params.screenBrightness*100)+"%";}
                 feedback.setText(label);feedback.setVisibility(VISIBLE);removeCallbacks(hide);return true;}}
-        if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){if(gesture){gesture=false;feedback.setVisibility(GONE);showControls();return true;}if(action==MotionEvent.ACTION_UP&&revealOnly){MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();showControls();return true;}showControls();}
+        if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){if(gesture){gesture=false;feedback.setVisibility(GONE);showControls();return true;}if(action==MotionEvent.ACTION_UP&&revealOnly){MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);super.dispatchTouchEvent(cancel);cancel.recycle();showControls();return true;}
+            // A tap on empty space hides visible controls; taps on a control keep them up.
+            if(action==MotionEvent.ACTION_UP&&Math.abs(event.getX()-downX)<dp(18)&&Math.abs(event.getY()-downY)<dp(18)&&!overControl(event))hideControls();else showControls();}
         return super.dispatchTouchEvent(event);
     }
 }
