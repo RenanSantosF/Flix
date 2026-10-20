@@ -89,7 +89,8 @@
           seek.disabled=!finite;if(finite&&!dragging)seek.value=String(Math.round(video.currentTime/video.duration*1000));seek.style.setProperty('--flix-progress',(finite?Math.max(0,Math.min(100,Number(seek.value)/10)):0)+'%');
           shadow.querySelector('.buffer').textContent=!video.paused&&video.readyState<3?'Preparando sua sessão…':'';
         }
-        shadow.querySelector('.surface').onclick=show;
+        // Tap toggles: hidden controls appear, visible ones hide (paused video keeps them up).
+        shadow.querySelector('.surface').onclick=function(){if(!view.classList.contains('hidden')&&!video.paused){win.clearTimeout(timer);view.classList.add('hidden');}else show();};
         shadow.querySelector('.mute').onclick=function(){video.muted=!video.muted;if(!video.muted&&video.volume===0)video.volume=1;update();show();};
         toggle.onclick=function(){if(video.paused||video.ended){var p=video.play();if(p&&p.catch)p.catch(function(){show();});}else video.pause();show();};
         [-10,10].forEach(function(seconds){shadow.querySelector(seconds<0?'.back':'.forward').onclick=function(){if(isFinite(video.duration)&&video.duration>0)video.currentTime=Math.max(0,Math.min(video.duration-.1,video.currentTime+seconds));show();};});

@@ -200,3 +200,6 @@ button.player-cover.minimal:hover .cover-play{transform:scale(1.06)}button.playe
 .cover-caption{position:relative;z-index:2;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#fffd}
 @keyframes cover-ring{0%{transform:scale(.9);opacity:1}100%{transform:scale(1.35);opacity:0}}
 @media (prefers-reduced-motion:reduce){.cover-play::after{animation:none;opacity:.6}}
+.frame-loading{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(ellipse at 50% 60%,#2a1622,#050507 70%);pointer-events:none;transition:opacity .45s ease,visibility .45s}
+.frame-loading.done{opacity:0;visibility:hidden}
+.frame-loading .wordmark{font-size:22px;animation:preroll-breathe 1.4s ease-in-out infinite}
