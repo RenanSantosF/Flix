@@ -278,3 +278,13 @@ button.player-cover.minimal:hover .cover-play{transform:scale(1.06)}button.playe
 .top-card:active .top-art{transform:scale(.97)}
 .top-shelf .section-heading span{color:#f5c84b}
 @media(max-width:759px){.bottom-nav{left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));height:var(--nav-height);padding:6px 8px;border:1px solid #ffffff18;border-radius:24px;box-shadow:0 10px 35px #000a;background:#16161ce8}.app-page{padding-bottom:calc(var(--nav-height) + 22px + env(safe-area-inset-bottom))}}
+/* App feel: no text selection, long-press callouts or image dragging outside form fields and the admin. */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+img{-webkit-user-drag:none}
+input,textarea,select,.admin-shell,.admin-login{-webkit-user-select:text;user-select:text}
+.splash-lock,.splash-lock body{overflow:hidden;overscroll-behavior:none;touch-action:none}
+#flix-splash{touch-action:none}
+/* Big rank numbers overflow their line box; keep the Top 10 rails horizontal only. */
+.top-rail{overflow-y:hidden;padding-top:10px}
+/* Floating bar: the page fades to black under it instead of showing posters around the pill. */
+@media(max-width:759px){.bottom-nav::before{content:'';position:absolute;z-index:-1;left:-12px;right:-12px;bottom:calc(-10px - env(safe-area-inset-bottom));height:calc(100% + 46px + env(safe-area-inset-bottom));background:linear-gradient(180deg,#0b0b0f00 0%,#0b0b0fcc 38%,#0b0b0f 62%);pointer-events:none}}
