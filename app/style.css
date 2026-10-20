@@ -312,3 +312,8 @@ input,textarea,select,.admin-shell,.admin-login{-webkit-user-select:text;user-se
 .login-error{color:#ff9db0!important;font-size:12px!important}
 .login-go{width:100%;min-height:52px;font-size:15px;margin-top:4px}
 .login-close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#ffffff10;color:#d6d6e0}
+/* "Minha lista" as an icon mirroring the back button, so the player sits higher. */
+.detail-fav{position:absolute;top:calc(14px + env(safe-area-inset-top));right:var(--gutter);z-index:3}
+.detail-fav .favorite-button{width:40px;height:40px;border:1px solid #ffffff22;background:#0008;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.detail-fav .favorite-button svg{width:20px;height:20px}
+.detail-fav .favorite-button[aria-pressed=true]{background:#f43f62d9;border-color:transparent}
