@@ -286,5 +286,6 @@ input,textarea,select,.admin-shell,.admin-login{-webkit-user-select:text;user-se
 #flix-splash{touch-action:none}
 /* Big rank numbers overflow their line box; keep the Top 10 rails horizontal only. */
 .top-rail{overflow-y:hidden;padding-top:10px}
-/* Floating bar: the page fades to black under it instead of showing posters around the pill. */
-@media(max-width:759px){.bottom-nav::before{content:'';position:absolute;z-index:-1;left:-12px;right:-12px;bottom:calc(-10px - env(safe-area-inset-bottom));height:calc(100% + 46px + env(safe-area-inset-bottom));background:linear-gradient(180deg,#0b0b0f00 0%,#0b0b0fcc 38%,#0b0b0f 62%);pointer-events:none}}
+/* Floating bar: from the screen edge up to just past the bar's top, dark at the bottom and quickly clearing. */
+.nav-fade{display:none}
+@media(max-width:759px){.nav-fade{display:block;position:fixed;left:0;right:0;bottom:0;z-index:49;pointer-events:none;height:calc(var(--nav-height) + 16px + env(safe-area-inset-bottom));background:linear-gradient(0deg,#0b0b0f 0%,#0b0b0f 18%,#0b0b0fb3 45%,#0b0b0f40 75%,#0b0b0f00 100%)}.flix-pip .nav-fade{visibility:hidden}}
