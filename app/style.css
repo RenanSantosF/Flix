@@ -190,22 +190,19 @@ button.player-cover:active .player-cover-play{transform:scale(.96)}
 .detail-back{position:absolute;top:calc(14px + env(safe-area-inset-top));left:var(--gutter);z-index:3;display:grid;place-items:center;width:40px;height:40px;border:1px solid #ffffff22;border-radius:50%;background:#0008;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;cursor:pointer}
 .detail-back:active{transform:scale(.94)}
 .title-page .playerSection{margin-top:4px}
-/* Play cover: the poster's own colors as a blurred glow, play centered with a turning brand ring. */
+/* Play cover: the poster's own colors as a blurred glow behind the black-and-white play. */
 button.player-cover.spot{justify-content:center;align-items:center;gap:14px;padding:0;background:#09080d}
 .player-cover>img.spot-bg{top:-25%;left:-25%;right:auto;bottom:auto;width:150%;height:150%;max-width:none;object-fit:cover;opacity:.9!important;z-index:0;filter:blur(36px) saturate(1.6) brightness(.62);transform:none;animation:spot-breathe 9s ease-in-out infinite alternate}
 .spot-shade{position:absolute;inset:0;z-index:1;background:radial-gradient(ellipse at 50% 45%,#0000 0%,#0006 55%,#000c 100%)}
-.spot .cover-play::before{content:'';position:absolute;inset:-9px;border-radius:50%;background:conic-gradient(from 0deg,var(--accent),#ff9db0,#7b3cff,var(--accent));-webkit-mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 calc(100% - 2px));mask:radial-gradient(farthest-side,#0000 calc(100% - 3px),#000 calc(100% - 2px));animation:spot-spin 3.2s linear infinite}
-.spot .cover-play{box-shadow:0 10px 40px #000a,0 0 60px #f43f6240}
 .spot .cover-caption{text-shadow:0 2px 12px #000}
 @keyframes spot-breathe{from{transform:scale(1)}to{transform:scale(1.12)}}
-@keyframes spot-spin{to{transform:rotate(360deg)}}
 .cover-play{position:relative;z-index:2;display:grid;place-items:center;width:62px;height:62px;border-radius:50%;background:#fff;color:#111;box-shadow:0 8px 28px #0009;transition:transform .2s}
 .cover-play svg{margin-left:3px}
 .cover-play::after{content:'';position:absolute;inset:-7px;border-radius:50%;border:1.5px solid #ffffff66;animation:cover-ring 2.2s ease-out infinite}
 button.player-cover.minimal:hover .cover-play{transform:scale(1.06)}button.player-cover.minimal:active .cover-play{transform:scale(.94)}
 .cover-caption{position:relative;z-index:2;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#fffd}
 @keyframes cover-ring{0%{transform:scale(.9);opacity:1}100%{transform:scale(1.35);opacity:0}}
-@media (prefers-reduced-motion:reduce){.cover-play::after{animation:none;opacity:.6}.spot-bg,.spot .cover-play::before{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.cover-play::after{animation:none;opacity:.6}.spot-bg{animation:none!important}}
 .frame-loading{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(ellipse at 50% 60%,#2a1622,#050507 70%);pointer-events:none;transition:opacity .45s ease,visibility .45s}
 .frame-loading.done{opacity:0;visibility:hidden}
 .frame-loading .wordmark{font-size:22px;animation:preroll-breathe 1.4s ease-in-out infinite}
