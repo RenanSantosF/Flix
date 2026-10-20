@@ -3,6 +3,8 @@ export type Title = {
   id: number; media_type: MediaType; title: string; poster_path?: string | null;
   backdrop_path?: string | null; overview?: string; vote_average?: number;
   release_date?: string; genre_ids?: number[];
+  /** Japanese animation: kept in its own "Animes" tab instead of Séries/Filmes. */
+  anime?: boolean;
 };
 export function normalizeTitle(value: any, type?: MediaType): Title | null {
   const media_type = type || value?.media_type;
@@ -13,7 +15,15 @@ export function normalizeTitle(value: any, type?: MediaType): Title | null {
     overview:typeof value.overview === 'string' ? value.overview.slice(0,3000) : '',
     vote_average:typeof value.vote_average === 'number' ? value.vote_average : 0,
     release_date:String(value.release_date || value.first_air_date || '').slice(0,10),
-    genre_ids:Array.isArray(value.genre_ids) ? value.genre_ids.filter(Number.isInteger) : []};
+    genre_ids:Array.isArray(value.genre_ids) ? value.genre_ids.filter(Number.isInteger) : [],
+    ...(isAnimeSource(value) ? {anime:true} : {})};
+}
+// TMDB lists carry genre_ids, detail pages carry genres; 16 is Animation on both.
+function isAnimeSource(value:any){
+  if (value.anime === true) return true;
+  const genres=Array.isArray(value.genre_ids) ? value.genre_ids : Array.isArray(value.genres) ? value.genres.map((g:any)=>g?.id) : [];
+  const japanese=value.original_language === 'ja' || (Array.isArray(value.origin_country) && value.origin_country.includes('JP'));
+  return genres.includes(16) && japanese;
 }
 export const titleKey = (title: Pick<Title,'id'|'media_type'>) => `${title.media_type}:${title.id}`;
 export const titleHref = (title: Pick<Title,'id'|'media_type'>) => `/titulo/${title.media_type}/${title.id}`;

@@ -2,11 +2,12 @@
 import {useEffect,useRef,useState} from 'react';
 import {PosterCard} from './Library';
 import {titleKey} from '../lib/catalog';
-import {uniqueTitles} from '../lib/discovery';
+import {matchesFilter,uniqueTitles} from '../lib/discovery';
+import type {BrowseFilter} from '../lib/discovery';
 import type {Title} from '../lib/catalog';
 
-export default function DiscoveryGrid({titles,filter}:{titles:Title[];filter:'all'|'movie'|'tv'}){
-  const [items,setItems]=useState(()=>uniqueTitles(titles).filter(t=>filter==='all'||t.media_type===filter));
+export default function DiscoveryGrid({titles,filter}:{titles:Title[];filter:BrowseFilter}){
+  const [items,setItems]=useState(()=>uniqueTitles(titles).filter(t=>matchesFilter(t,filter)));
   const [visible,setVisible]=useState(24),[page,setPage]=useState(2),[hasMore,setHasMore]=useState(true);
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const pending=useRef<AbortController|null>(null);
@@ -20,7 +21,7 @@ export default function DiscoveryGrid({titles,filter}:{titles:Title[];filter:'al
       if(!response.ok)throw Error();const data=await response.json();
       if(!Array.isArray(data.results))throw Error();
       if(controller.signal.aborted)return;
-      setItems(previous=>uniqueTitles([...previous,...data.results]));
+      setItems(previous=>uniqueTitles([...previous,...data.results.filter((t:Title)=>matchesFilter(t,filter))]));
       setVisible(n=>n+24);setPage(n=>n+1);setHasMore(!!data.has_more);
     }catch{if(!controller.signal.aborted)setError('As próximas sugestões não carregaram. Tente novamente.');}
     finally{if(!controller.signal.aborted)setBusy(false);}

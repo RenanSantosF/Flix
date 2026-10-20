@@ -10,3 +10,18 @@ test('genre discovery excludes featured titles and duplicates across shelves wit
  const shelves=makeShelves(data,[{id:1,media_type:'movie',title:'Featured'}]);
  assert.deepEqual(shelves.map(s=>[s.id,s.titles.map(t=>t.id)]),[['action',[2]],['comedy',[3]],['thriller',[4]]]);
 });
+
+test('Japanese animation is an anime and leaves Séries/Filmes for its own tab', async () => {
+  const {normalizeTitle}=await import('../lib/catalog.ts');
+  const {matchesFilter}=await import('../lib/discovery.ts');
+  const naruto=normalizeTitle({id:46260,name:'Naruto',genre_ids:[16,10759],original_language:'ja'},'tv');
+  const fromDetail=normalizeTitle({id:1,name:'Detalhe',genres:[{id:16}],origin_country:['JP']},'tv');
+  const simpsons=normalizeTitle({id:456,name:'Os Simpsons',genre_ids:[16,35],original_language:'en'},'tv');
+  const drama=normalizeTitle({id:2,name:'Drama',genre_ids:[18],original_language:'ja'},'tv');
+  assert.equal(naruto.anime,true);assert.equal(fromDetail.anime,true);
+  assert.equal(simpsons.anime,undefined);assert.equal(drama.anime,undefined);
+  assert.equal(matchesFilter(naruto,'anime'),true);assert.equal(matchesFilter(naruto,'tv'),false);assert.equal(matchesFilter(naruto,'all'),true);
+  assert.equal(matchesFilter(simpsons,'tv'),true);assert.equal(matchesFilter(simpsons,'anime'),false);
+  const film=normalizeTitle({id:3,title:'Suzume',genre_ids:[16],original_language:'ja'},'movie');
+  assert.equal(matchesFilter(film,'movie'),false);assert.equal(matchesFilter(film,'anime'),true);
+});

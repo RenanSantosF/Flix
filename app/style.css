@@ -317,3 +317,6 @@ input,textarea,select,.admin-shell,.admin-login{-webkit-user-select:text;user-se
 .detail-fav .favorite-button{width:40px;height:40px;border:1px solid #ffffff22;background:#0008;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 .detail-fav .favorite-button svg{width:20px;height:20px}
 .detail-fav .favorite-button[aria-pressed=true]{background:#f43f62d9;border-color:transparent}
+/* Four tabs plus "Ao vivo" on one line on narrow phones. */
+.browse-tabs button,.browse-tabs>a{white-space:nowrap}
+@media(max-width:420px){.browse-tabs{gap:14px}.browse-tabs button,.browse-tabs>a{font-size:12px}}
