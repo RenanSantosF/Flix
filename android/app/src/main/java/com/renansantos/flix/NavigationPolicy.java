@@ -24,6 +24,13 @@ final class NavigationPolicy {
         } catch (RuntimeException e) { return false; }
     }
 
+    static boolean isDownloadUrl(String value) {
+        try {
+            URI uri = URI.create(value);
+            return isAppUrl(value) && "/baixar".equals(uri.getPath());
+        } catch (RuntimeException e) { return false; }
+    }
+
     static boolean isAdUrl(String value) {
         try {
             String host = URI.create(value).getHost();

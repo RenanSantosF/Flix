@@ -6,13 +6,26 @@ android {
         applicationId 'com.renansantos.flix'
         minSdk 26
         targetSdk 35
-        versionCode 23
-        versionName '0.23-toque'
+        versionCode 24
+        versionName '0.24-download'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    buildTypes { release { minifyEnabled false } }
+    // Downloads must keep one signature so new versions install over old ones.
+    // CI writes the keystore from repository secrets; without them release falls back to the debug key.
+    def releaseStore = System.getenv('FLIX_KEYSTORE_FILE')
+    signingConfigs {
+        release {
+            if (releaseStore && file(releaseStore).exists()) {
+                storeFile file(releaseStore)
+                storePassword System.getenv('FLIX_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('FLIX_KEY_ALIAS') ?: 'flix'
+                keyPassword System.getenv('FLIX_KEY_PASSWORD') ?: System.getenv('FLIX_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release { minifyEnabled false; signingConfig(releaseStore && file(releaseStore).exists() ? signingConfigs.release : signingConfigs.debug) } }
 }
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'

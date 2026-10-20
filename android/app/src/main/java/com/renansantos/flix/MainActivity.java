@@ -188,6 +188,11 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         browser.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
+                // The update prompt hands the APK download to the system browser; nothing else leaves the app.
+                if (request.isForMainFrame() && request.hasGesture() && NavigationPolicy.isDownloadUrl(url)) {
+                    try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))); } catch (Exception ignored) { }
+                    return true;
+                }
                 boolean allowed = request.isForMainFrame() ? NavigationPolicy.isAppUrl(url) : NavigationPolicy.canLoadSubframe(url);
                 if (!allowed) {noteBlockedNavigation();if(!request.isForMainFrame()&&!contextKey.isEmpty())browserDiagnostics.blockedFrame(request.getUrl().getScheme());}
                 return !allowed;
@@ -256,7 +261,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     @SuppressLint("SetJavaScriptEnabled") private void configureBrowser() {
         WebSettings settings = browser.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " FlixAndroid/1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " FlixAndroid/1.0 FlixBuild/" + BuildConfig.VERSION_CODE);
         // Async provider flows also receive the same offline popup sink. No new window is displayed.
         settings.setSupportMultipleWindows(true); settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);

@@ -6,6 +6,11 @@ public class NavigationPolicyTest {
         assertTrue(NavigationPolicy.isAppUrl(NavigationPolicy.HOME + "titulo/movie/603"));
         for (String bad : new String[]{"https://flix-ebon-ten.vercel.app.evil.test/", "https://evil.test/", "http://flix-ebon-ten.vercel.app/", "intent://ads", "file:///etc/passwd", "https://evil@flix-ebon-ten.vercel.app/", "https://flix-ebon-ten.vercel.app:444/"}) assertFalse(bad, NavigationPolicy.isAppUrl(bad));
     }
+    @Test public void onlyTheOwnDownloadRouteLeavesTheApp() {
+        assertTrue(NavigationPolicy.isDownloadUrl(NavigationPolicy.HOME + "baixar"));
+        assertTrue(NavigationPolicy.isDownloadUrl(NavigationPolicy.HOME + "baixar?origem=app"));
+        for (String bad : new String[]{NavigationPolicy.HOME + "baixar/x", NavigationPolicy.HOME, "https://evil.test/baixar", "https://flix-ebon-ten.vercel.app.evil.test/baixar", "http://flix-ebon-ten.vercel.app/baixar"}) assertFalse(bad, NavigationPolicy.isDownloadUrl(bad));
+    }
     @Test public void videoAndVerificationSubframesRemainPossible() {
         assertTrue(NavigationPolicy.canLoadSubframe("https://superflixapi.fun/filme/603"));
         assertTrue(NavigationPolicy.canLoadSubframe("https://challenges.cloudflare.com/widget"));
