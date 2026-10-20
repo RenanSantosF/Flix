@@ -4,7 +4,7 @@
 @supports not (aspect-ratio:1){.videoFrame:before{content:'';display:block;padding-top:56.25%}.videoFrame iframe,.videoFrame video,.player-error{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%}.poster-art:before,.poster-skeleton:before{content:'';display:block;padding-top:150%}.poster-art>img,.poster-placeholder{position:absolute;top:0;left:0;width:100%;height:100%}.continue-art:before{content:'';display:block;padding-top:56.25%}.continue-art>img{position:absolute;top:0;left:0;width:100%;height:100%}.loading-hero:before,.flix-pip .videoFrame:before{display:none}.browse-tabs button+button{margin-left:20px}.feature-actions>*+*{margin-left:10px}.feature-meta>span+span{margin-left:12px}.poster-rail>.poster-card{margin-right:14px}.continue-rail>.continue-card{margin-right:14px}.bottom-nav svg{margin-bottom:5px}.detail-actions>.button{margin:0 10px 10px 0}.player-controls>.button,.player-controls>.icon-button{margin:0 8px 8px 0}.app-header>.wordmark{margin-left:10px}.app-header>.avatar{margin-left:10px}.heading-dot{margin-left:9px}}
 
 /* Live television, sports and the provider's tall server chooser. */
-.videoFrame.server-selection{aspect-ratio:auto;height:clamp(390px,68vh,620px);min-height:390px}
+.videoFrame.server-selection{aspect-ratio:auto;height:clamp(300px,48vh,392px);min-height:300px}
 .videoFrame.server-selection:before{display:none}
 .videoFrame iframe{position:absolute;top:0;left:0;right:0;bottom:0}
 .flix-pip .videoFrame.server-selection{min-height:0!important;height:100vh!important}
@@ -190,16 +190,22 @@ button.player-cover:active .player-cover-play{transform:scale(.96)}
 .detail-back{position:absolute;top:calc(14px + env(safe-area-inset-top));left:var(--gutter);z-index:3;display:grid;place-items:center;width:40px;height:40px;border:1px solid #ffffff22;border-radius:50%;background:#0008;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:#fff;cursor:pointer}
 .detail-back:active{transform:scale(.94)}
 .title-page .playerSection{margin-top:4px}
-button.player-cover.minimal{justify-content:center;gap:12px;padding:0}
-button.player-cover.minimal>img{opacity:.42!important}
-.player-cover.minimal .player-cover-shade{background:radial-gradient(ellipse at center,#0000 0%,#0007 75%)}
+/* Branded play cover: ambient glow + tilted poster, never the hero backdrop again. */
+button.player-cover.studio{justify-content:center;align-items:center;gap:0;padding:0;background:#0a090f}
+.cover-aurora{position:absolute;inset:0;z-index:0;background:radial-gradient(42% 55% at 22% 28%,#f43f6244,transparent 70%),radial-gradient(46% 62% at 82% 74%,#7b3cff38,transparent 72%),linear-gradient(160deg,#130a13,#07060b);animation:cover-drift 10s ease-in-out infinite alternate}
+.cover-stage{position:relative;z-index:2;display:flex;align-items:center;gap:clamp(16px,5vw,26px);padding:0 20px}
+.cover-poster{width:clamp(56px,15vw,76px);height:auto;aspect-ratio:2/3;object-fit:cover;border-radius:9px;transform:rotate(-6deg);box-shadow:0 16px 34px #000b,0 0 0 1px #ffffff1f;transition:transform .3s}
+button.player-cover.studio:hover .cover-poster,button.player-cover.studio:focus-visible .cover-poster{transform:rotate(-6deg) translateY(-3px) scale(1.03)}
+.cover-main{display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+.cover-main .cover-caption{text-align:left}
+@keyframes cover-drift{0%{transform:scale(1.04) translate(0,0)}100%{transform:scale(1.16) translate(-3%,2%)}}
 .cover-play{position:relative;z-index:2;display:grid;place-items:center;width:62px;height:62px;border-radius:50%;background:#fff;color:#111;box-shadow:0 8px 28px #0009;transition:transform .2s}
 .cover-play svg{margin-left:3px}
 .cover-play::after{content:'';position:absolute;inset:-7px;border-radius:50%;border:1.5px solid #ffffff66;animation:cover-ring 2.2s ease-out infinite}
 button.player-cover.minimal:hover .cover-play{transform:scale(1.06)}button.player-cover.minimal:active .cover-play{transform:scale(.94)}
 .cover-caption{position:relative;z-index:2;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#fffd}
 @keyframes cover-ring{0%{transform:scale(.9);opacity:1}100%{transform:scale(1.35);opacity:0}}
-@media (prefers-reduced-motion:reduce){.cover-play::after{animation:none;opacity:.6}}
+@media (prefers-reduced-motion:reduce){.cover-play::after{animation:none;opacity:.6}.cover-aurora{animation:none}}
 .frame-loading{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(ellipse at 50% 60%,#2a1622,#050507 70%);pointer-events:none;transition:opacity .45s ease,visibility .45s}
 .frame-loading.done{opacity:0;visibility:hidden}
 .frame-loading .wordmark{font-size:22px;animation:preroll-breathe 1.4s ease-in-out infinite}
