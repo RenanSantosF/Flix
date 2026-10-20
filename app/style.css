@@ -289,3 +289,23 @@ input,textarea,select,.admin-shell,.admin-login{-webkit-user-select:text;user-se
 /* Floating bar: from the screen edge up to just past the bar's top, dark at the bottom and quickly clearing. */
 .nav-fade{display:none}
 @media(max-width:759px){.nav-fade{display:block;position:fixed;left:0;right:0;bottom:0;z-index:49;pointer-events:none;height:calc(var(--nav-height) + 16px + env(safe-area-inset-bottom));background:linear-gradient(0deg,#0b0b0f 0%,#0b0b0f 18%,#0b0b0fb3 45%,#0b0b0f40 75%,#0b0b0f00 100%)}.flix-pip .nav-fade{visibility:hidden}}
+/* Account: one card in "Minha lista" and a bottom sheet with phone + password. */
+.account-card{display:flex;align-items:center;gap:14px;width:calc(100% - var(--gutter)*2);margin:0 var(--gutter) 26px;padding:14px 16px;border-radius:16px;background:linear-gradient(120deg,#2a1520,#17171e 70%);border:1px solid #f43f6230;color:#fff;text-align:left}
+.account-card>div{flex:1;min-width:0;display:grid;gap:3px}
+.account-card strong{font-size:14px}
+.account-card>div>span{font-size:11px;color:#a9a9ba}
+.account-card>svg{color:#a9a9ba}
+.account-icon{flex:0 0 auto;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#f43f621f;color:var(--accent)}
+.account-card.signed-in{background:#15161c;border-color:#ffffff14}
+.account-card.signed-in .account-icon{background:#34d39922;color:#5be3a8}
+.account-out{background:#ffffff12;border:1px solid #ffffff1c;border-radius:10px;padding:9px 14px;font-size:12px;font-weight:650;color:#e6e6ee}
+.login-sheet{gap:12px;text-align:left;justify-items:stretch}
+.login-sheet .wordmark{justify-self:center;font-size:26px}
+.login-sheet h2,.login-sheet>p{text-align:center;margin:0}
+.login-sheet>p{font-size:13px;color:#b3b3c4}
+.login-sheet label{display:grid;gap:6px;font-size:11px;color:#a9a9ba}
+.login-sheet input{width:100%;min-height:52px;padding:0 15px;border-radius:12px;border:1px solid #ffffff1f;background:#0e0e13;color:#fff;font-size:17px;outline:none}
+.login-sheet input:focus{border-color:#f43f6299;box-shadow:0 0 0 3px #f43f6214}
+.login-error{color:#ff9db0!important;font-size:12px!important}
+.login-go{width:100%;min-height:52px;font-size:15px;margin-top:4px}
+.login-close{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:#ffffff10;color:#d6d6e0}
