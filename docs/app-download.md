@@ -6,8 +6,11 @@
 - A cada push na main com testes verdes, o workflow Android publica o release
   `android-v<versionCode>` com o asset `Flix.apk` (assinado com a chave fixa).
 - O app envia `FlixBuild/<versionCode>` no user agent; `components/UpdatePrompt.tsx`
-  compara com `/api/app-version` e mostra o aviso. "Atualizar agora" abre `/baixar`
-  no navegador do sistema (única URL que sai do app).
+  compara com `/api/app-version` e mostra o aviso.
+- A partir da 0.25 (`FlixUpdater/1` no user agent), "Atualizar agora" baixa o APK
+  dentro do app (`AppUpdater.java`) com barra de progresso e abre o instalador do
+  Android. Na primeira vez o Android pede para permitir que o Flix instale apps.
+  A 0.24 ainda abre `/baixar` no navegador.
 - Para lançar uma versão nova do app, aumente `versionCode`/`versionName` em
   `android/app/build.gradle`.
 

@@ -261,7 +261,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
     @SuppressLint("SetJavaScriptEnabled") private void configureBrowser() {
         WebSettings settings = browser.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " FlixAndroid/1.0 FlixBuild/" + BuildConfig.VERSION_CODE);
+        settings.setUserAgentString(settings.getUserAgentString() + " FlixAndroid/1.0 FlixBuild/" + BuildConfig.VERSION_CODE + " FlixUpdater/1");
         // Async provider flows also receive the same offline popup sink. No new window is displayed.
         settings.setSupportMultipleWindows(true); settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);
@@ -306,6 +306,7 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
                     if(pendingRecovery!=null&&pendingToken.equals(data.optString("token"))) {Runnable open=pendingRecovery;pendingRecovery=null;pendingToken="";activeReply=null;open.run();}
                 }
                 else if ("pip".equals(type)) enterPlayerPip();
+                else if ("update".equals(type)) updater().start();
                 else if ("next".equals(type)) { String label=data.optString("label",""); nextLabel=label.substring(0,Math.min(40,label.length())); if(fullscreenPlayer!=null)fullscreenPlayer.setNext(nextLabel); }
                 else if ("cast".equals(type)) openCast();
                 else if ("context".equals(type)) {
@@ -578,6 +579,15 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         if (inPip) { if(fullscreenPlayer!=null)fullscreenPlayer.pip(true);root.setPadding(0, 0, 0, 0); if(nativePlayback!=null)nativePlayback.pip(true); }
         else { restoreInlineLayout(); root.requestApplyInsets(); }
     }
+    private AppUpdater updater;
+    private AppUpdater updater() {
+        if (updater == null) updater = new AppUpdater(this, (state, percent) -> {
+            if (destroyed) return;
+            try { browser.evaluateJavascript("window.dispatchEvent(new CustomEvent('flix:update',{detail:" + new JSONObject().put("state", state).put("progress", percent) + "}))", null); } catch (Exception ignored) { }
+        });
+        return updater;
+    }
+    @Override protected void onResume() { super.onResume(); if (updater != null) updater.resumed(); }
     @Override protected void onStart() {super.onStart();foreground=true;requestGate.visible(true);if(nativePlayback!=null)nativePlayback.visible();}
     @Override protected void onStop() {
         super.onStop();foreground=false;requestGate.visible(enteringPip||isInPictureInPictureMode());

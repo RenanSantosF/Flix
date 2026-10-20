@@ -252,3 +252,6 @@ button.player-cover.minimal:hover .cover-play{transform:scale(1.06)}button.playe
 @media(min-width:760px){.landing-features{grid-template-columns:repeat(4,minmax(0,1fr))}.landing-row img{width:160px}.landing-hero{align-items:center;padding-bottom:40px}}
 @keyframes landing-slide{to{transform:translateX(-50%)}}
 @media (prefers-reduced-motion:reduce){.landing-row,.landing-cta::after{animation:none}}
+.update-progress{position:relative;width:100%;height:30px;border-radius:10px;overflow:hidden;background:#ffffff14;margin:4px 0 2px}
+.update-progress i{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),#ff8fa3);transform-origin:left;transition:transform .3s ease}
+.update-progress span{position:relative;display:block;line-height:30px;font-size:12px;font-weight:800}
