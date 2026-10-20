@@ -7,7 +7,8 @@ const SNOOZE='flix-update-later';
 export default function UpdatePrompt(){
  const [release,setRelease]=useState<AppRelease|null>(null),[build,setBuild]=useState<number|null>(null),[open,setOpen]=useState(false),[started,setStarted]=useState(false),[copied,setCopied]=useState(false),[native,setNative]=useState(false),[phase,setPhase]=useState(''),[progress,setProgress]=useState(0);
  useEffect(()=>{
-  const current=appBuild(navigator.userAgent);if(current===null)return;setBuild(current);setNative(/ FlixUpdater\//.test(navigator.userAgent));
+  const current=appBuild(navigator.userAgent);if(current===null)return;setBuild(current);// Old WebViews without the message bridge cannot reach the native updater: keep the browser download.
+  setNative(/ FlixUpdater\//.test(navigator.userAgent)&&!!window.FlixControl);
   // The app reports download/install progress for in-app updates.
   const onUpdate=(e:Event)=>{const d=(e as CustomEvent).detail||{};setPhase(String(d.state||''));setProgress(Number(d.progress)||0);};
   addEventListener('flix:update',onUpdate);
