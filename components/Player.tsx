@@ -5,6 +5,7 @@ import PlayerDiagnostic from './PlayerDiagnostic';
 import ProviderFrame from './ProviderFrame';
 import PrerollAd from './PrerollAd';
 import EpisodeList from './EpisodeList';
+import {reportWatch} from '../lib/ad-client';
 import {readEpisodes,recordEpisode} from '../lib/episode-progress';
 import {useLibrary} from './Library';
 import {resumePosition,recordPlayback,queueEpisode,readLibrary,timeLabel} from '../lib/watch-library';
@@ -27,6 +28,9 @@ const resumeFor=(s:number,e:number)=>{const r=resumePosition(title,s,e);if(r>0||
 // The pre-roll plays once per visit, before the first content load; episode changes go straight to content.
 const [adDone,setAdDone]=useState(false);
 const playing=started&&adDone;
+const counted=useRef(false);
+// Counts toward the daily Top 10 once the viewer actually starts the title.
+useEffect(()=>{if(playing&&!counted.current){counted.current=true;reportWatch(type,title.id);}},[playing,type,title.id]);
 useEffect(()=>{
 if(!ready||initialized.current)return;initialized.current=true;
 const old=readLibrary().history.find(h=>titleKey(h.title)===titleKey(title)&&!h.completed);

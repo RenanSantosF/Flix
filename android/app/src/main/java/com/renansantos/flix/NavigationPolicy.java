@@ -24,6 +24,16 @@ final class NavigationPolicy {
         } catch (RuntimeException e) { return false; }
     }
 
+    /** "exit" on the home catalog, "home" on the other bottom-bar tabs, "back" on deeper pages. */
+    static String backTarget(String value) {
+        if (!isAppUrl(value)) return "back";
+        URI uri = URI.create(value);
+        String path = uri.getPath() == null || uri.getPath().isEmpty() ? "/" : uri.getPath(), query = uri.getQuery() == null ? "" : uri.getQuery();
+        if ("/".equals(path)) return query.matches("(^|.*&)view=(search|list)(&.*|$)") ? "home" : "exit";
+        if ("/ao-vivo".equals(path) && query.isEmpty()) return "home";
+        return "back";
+    }
+
     static boolean isDownloadUrl(String value) {
         try {
             URI uri = URI.create(value);

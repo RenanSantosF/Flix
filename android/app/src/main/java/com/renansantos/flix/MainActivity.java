@@ -641,7 +641,13 @@ public final class MainActivity extends androidx.appcompat.app.AppCompatActivity
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE); root.requestApplyInsets(); updatePipParams();
         if (customViewCallback != null) { customViewCallback.onCustomViewHidden(); customViewCallback = null; }
     }
-    @Override public void onBackPressed() { if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.close(true); else if (customView != null) exitFullscreen(); else if (browser.canGoBack()) browser.goBack(); else super.onBackPressed(); }
+    @Override public void onBackPressed() { if(nativePlayback!=null&&nativePlayback.isOpen())nativePlayback.close(true); else if (customView != null) exitFullscreen(); else {
+        // Home is the root: back from it leaves the app; back from a main tab returns to home.
+        String target = NavigationPolicy.backTarget(browser.getUrl() == null ? "" : browser.getUrl());
+        if ("home".equals(target)) browser.loadUrl(NavigationPolicy.HOME);
+        else if ("back".equals(target) && browser.canGoBack()) browser.goBack();
+        else if ("back".equals(target)) browser.loadUrl(NavigationPolicy.HOME);
+        else super.onBackPressed(); } }
     @Override protected void onSaveInstanceState(Bundle outState) { browser.saveState(outState); super.onSaveInstanceState(outState); }
     @Override protected void onDestroy() {
         destroyed = true;requestGate.clear();cancelWebRetry();pendingRecovery=null;pendingToken=""; handler.removeCallbacksAndMessages(null);

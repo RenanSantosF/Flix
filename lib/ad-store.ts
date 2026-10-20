@@ -7,7 +7,7 @@ const TOKEN=process.env.KV_REST_API_TOKEN||process.env.UPSTASH_REDIS_REST_TOKEN|
 export const storeReady=()=>!!(URL_&&TOKEN);
 export const adminReady=()=>storeReady()&&(process.env.ADMIN_PASSWORD||'').length>=8;
 type Command=(string|number)[];
-async function pipeline(commands:Command[]):Promise<any[]>{
+export async function pipeline(commands:Command[]):Promise<any[]>{
  if(!storeReady())throw Error('store_missing');
  const response=await fetch(URL_.replace(/\/$/,'')+'/pipeline',{method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify(commands),cache:'no-store',signal:AbortSignal.timeout(5000)});
  if(!response.ok)throw Error('store_unavailable');
