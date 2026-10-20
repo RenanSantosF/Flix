@@ -72,7 +72,7 @@ jobs:
             android/emulator.log
           retention-days: 14
       - name: Publish download release
-        if: github.event_name != 'pull_request' && success()
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && success()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -84,4 +84,4 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk Flix.apk
           # The site's /baixar link always points at the latest release asset named Flix.apk.
           if gh release view "$tag" >/dev/null 2>&1; then gh release upload "$tag" Flix.apk --clobber
-          else gh release create "$tag" Flix.apk --title "Flix $name" --notes "$(git log -1 --pretty=%s)" --latest; fi
+          else gh release create "$tag" Flix.apk --target "$GITHUB_SHA" --title "Flix $name" --notes "$(git log -1 --pretty=%s)" --latest; fi
