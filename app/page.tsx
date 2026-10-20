@@ -2,6 +2,8 @@ import {cookies,headers} from 'next/headers';
 import Home from '../components/HomeExperience';
 import Landing from '../components/Landing';
 import {isAppAgent,latestRelease} from '../lib/app-release';
+import {fillTop,topTitles} from '../lib/top-store';
+import {daySeed} from '../lib/top-watch';
 import {tmdb} from '../lib/catalog';
 import {cleanTitles,discoveryShelves,makeShelves} from '../lib/discovery';
 export default async function Page({searchParams}:{searchParams:Promise<{view?:string}>}) {
@@ -16,5 +18,6 @@ export default async function Page({searchParams}:{searchParams:Promise<{view?:s
     ...discoveryShelves.map(s=>tmdb(`discover/${s.type}?with_genres=${s.genre}&sort_by=popularity.desc&include_adult=false&include_video=false`)),
   ]);
   const movies=cleanTitles(trending),filmTitles=cleanTitles(films,'movie'),seriesTitles=cleanTitles(series,'tv');
-  return <Home movies={movies} films={filmTitles} series={seriesTitles} shelves={makeShelves(discovery,[...movies,...filmTitles,...seriesTitles])} configured={!!process.env.TMDB_TOKEN} initialView={view==='search'?'search':view==='list'?'list':'home'}/>;
+  const [watchedMovies,watchedSeries]=await Promise.all([topTitles('movie'),topTitles('tv')]);
+  return <Home topMovies={fillTop(watchedMovies,filmTitles)} topSeries={fillTop(watchedSeries,seriesTitles)} seed={daySeed()} movies={movies} films={filmTitles} series={seriesTitles} shelves={makeShelves(discovery,[...movies,...filmTitles,...seriesTitles])} configured={!!process.env.TMDB_TOKEN} initialView={view==='search'?'search':view==='list'?'list':'home'}/>;
 }

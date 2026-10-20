@@ -6,6 +6,16 @@ public class NavigationPolicyTest {
         assertTrue(NavigationPolicy.isAppUrl(NavigationPolicy.HOME + "titulo/movie/603"));
         for (String bad : new String[]{"https://flix-ebon-ten.vercel.app.evil.test/", "https://evil.test/", "http://flix-ebon-ten.vercel.app/", "intent://ads", "file:///etc/passwd", "https://evil@flix-ebon-ten.vercel.app/", "https://flix-ebon-ten.vercel.app:444/"}) assertFalse(bad, NavigationPolicy.isAppUrl(bad));
     }
+    @Test public void backFromHomeLeavesAndMainTabsReturnHome() {
+        assertEquals("exit", NavigationPolicy.backTarget(NavigationPolicy.HOME));
+        assertEquals("exit", NavigationPolicy.backTarget(NavigationPolicy.HOME + "?view=home"));
+        assertEquals("home", NavigationPolicy.backTarget(NavigationPolicy.HOME + "?view=search"));
+        assertEquals("home", NavigationPolicy.backTarget(NavigationPolicy.HOME + "?view=list"));
+        assertEquals("home", NavigationPolicy.backTarget(NavigationPolicy.HOME + "ao-vivo"));
+        assertEquals("back", NavigationPolicy.backTarget(NavigationPolicy.HOME + "ao-vivo?id=12&tipo=channel"));
+        assertEquals("back", NavigationPolicy.backTarget(NavigationPolicy.HOME + "titulo/movie/603"));
+        assertEquals("back", NavigationPolicy.backTarget("https://evil.test/"));
+    }
     @Test public void onlyTheOwnDownloadRouteLeavesTheApp() {
         assertTrue(NavigationPolicy.isDownloadUrl(NavigationPolicy.HOME + "baixar"));
         assertTrue(NavigationPolicy.isDownloadUrl(NavigationPolicy.HOME + "baixar?origem=app"));

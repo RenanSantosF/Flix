@@ -27,3 +27,5 @@ export async function tmdb(path: string) {
     return response.ok ? await response.json() : null;
   } catch { return null; }
 }
+// TMDB genre ids (movie and TV) to short Portuguese labels for the featured title.
+export const GENRE_NAMES:Record<number,string>={28:'Ação',12:'Aventura',16:'Animação',35:'Comédia',80:'Crime',99:'Documentário',18:'Drama',10751:'Família',14:'Fantasia',36:'História',27:'Terror',10402:'Música',9648:'Mistério',10749:'Romance',878:'Ficção científica',53:'Suspense',10752:'Guerra',37:'Faroeste',10759:'Ação e aventura',10762:'Infantil',10764:'Reality',10765:'Sci-fi e fantasia',10768:'Guerra e política'};
