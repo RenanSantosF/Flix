@@ -2,6 +2,19 @@ import {normalizeTitle,titleKey} from './catalog.ts';
 import type {MediaType,Title} from './catalog.ts';
 
 export type DiscoveryShelf={id:string;label:string;type:MediaType;titles:Title[]};
+export type BrowseFilter='all'|'movie'|'tv'|'anime';
+/** Animes live in their own tab, so Filmes and Séries leave them out. */
+export function matchesFilter(title:Title,filter:BrowseFilter){
+  if(filter==='all')return true;
+  if(filter==='anime')return title.anime===true;
+  return title.media_type===filter&&!title.anime;
+}
+export const ANIME_QUERY='with_genres=16&with_original_language=ja&include_adult=false';
+export const animeShelves=[
+  {id:'anime-now',label:'Animes do momento',type:'tv',query:`discover/tv?${ANIME_QUERY}&sort_by=popularity.desc`},
+  {id:'anime-action',label:'Batalhas épicas',type:'tv',query:`discover/tv?with_genres=16,10759&with_original_language=ja&include_adult=false&sort_by=vote_count.desc`},
+  {id:'anime-films',label:'Filmes de anime',type:'movie',query:`discover/movie?${ANIME_QUERY}&sort_by=popularity.desc`},
+] as const;
 export const discoveryShelves=[
   {id:'action',label:'Uma dose de adrenalina',type:'movie',genre:28},
   {id:'comedy',label:'Para deixar o dia mais leve',type:'movie',genre:35},
