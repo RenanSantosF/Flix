@@ -34,7 +34,8 @@ public class PopupBlockingTest {
         CountDownLatch done = new CountDownLatch(1);
         AtomicReference<String> result = new AtomicReference<>();
         scenario.onActivity(activity -> activity.testBrowser().evaluateJavascript(script, value -> { result.set(value); done.countDown(); }));
-        assertTrue("JavaScript callback timed out", done.await(5, TimeUnit.SECONDS));
+        // The software-rendered CI emulator can stall the renderer for several seconds while a live page loads.
+        assertTrue("JavaScript callback timed out", done.await(15, TimeUnit.SECONDS));
         return result.get();
     }
     private void waitForJs(ActivityScenario<MainActivity> scenario, String script) throws Exception {
@@ -240,6 +241,8 @@ public class PopupBlockingTest {
         try (ActivityScenario<MainActivity> scenario = launch()) {
             load(scenario, "<!doctype html><meta name='viewport' content='width=device-width,initial-scale=1'><title>Popup test</title><body style='margin:0'><button style='width:100%;height:64px' onclick=\"window.open('https://asiafilm.org/ad','_blank')\">Main popup</button><iframe style='position:absolute;left:0;top:100px;width:100%;height:80px;border:0' srcdoc=\"<meta name='viewport' content='width=device-width,initial-scale=1'><body style='margin:0'><button style='width:100%;height:64px' onclick=&quot;window.open('https://linkonclick.com/ad','_blank')&quot;>Iframe popup</button>\"></iframe>");
             tap(scenario, 50, 32); waitForCount(scenario, true, 1);
+            // srcdoc frames load asynchronously; tap only once the iframe button is laid out.
+            waitForJs(scenario, "(function(){var d=document.querySelector('iframe').contentDocument,b=d&&d.querySelector('button');return !!b&&b.getBoundingClientRect().height>0;})()");
             tap(scenario, 50, 132); waitForCount(scenario, true, 2);
             assertEquals("\"Popup test\"", js(scenario, "document.title"));
             assertEquals("1", js(scenario, "document.querySelectorAll('iframe').length"));
@@ -622,9 +625,11 @@ public class PopupBlockingTest {
             scenario.onActivity(a->{a.getSharedPreferences("media-cooldowns",Context.MODE_PRIVATE).edit().clear().commit();a.testWebRetryClip(new byte[0],true);a.testChildHtml(retryingProviderFixture());});
             load(scenario,gateParentFixture());waitForJs(scenario,"!!window.FlixControl && !!document.querySelector('iframe').contentWindow.__flixMediaObserver");
             js(scenario,"FlixControl.postMessage(JSON.stringify({type:'context',key:'movie:603',season:1,episode:1}));true");tap(scenario,50,32);
-            waitForJs(scenario,"stopped && lastNotice.indexOf('repetições foram interrompidas')>=0");SystemClock.sleep(2500);
+            waitForJs(scenario,"stopped && lastNotice.indexOf('repetições foram interrompidas')>=0");
+            AtomicReference<Integer> atStop=new AtomicReference<>(0);scenario.onActivity(a->atStop.set(a.testWebRetryCount()));SystemClock.sleep(2500);
             AtomicReference<Integer> requests=new AtomicReference<>(0),opens=new AtomicReference<>(0);scenario.onActivity(a->{requests.set(a.testWebRetryCount());opens.set(a.nativeOpenCount());});
-            assertEquals(2,(int)requests.get());assertEquals(0,(int)opens.get());assertEquals("true",js(scenario,"ticks>30 && document.querySelector('iframe').contentWindow.location.href==='about:blank'"));
+            // The fixture's own 50 ms loop can slip in before the UI thread records the second 429; nothing may follow the stop.
+            assertTrue("Expected the app retry after the first 429",atStop.get()>=2);assertEquals(atStop.get(),requests.get());assertEquals(0,(int)opens.get());assertEquals("true",js(scenario,"ticks>30 && document.querySelector('iframe').contentWindow.location.href==='about:blank'"));
             saveScreenshot("Flix-repeticoes-interrompidas.png");
         }
     }
